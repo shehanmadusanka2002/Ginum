@@ -4,13 +4,15 @@ import { FaTimes, FaUserTie, FaBuilding, FaUser } from "react-icons/fa";
 import AddAccountForm from "../account/AddAccountForm";
 import NewProjectForm from "../projects/NewProjectForm";
 import PayerPayee from "../PayerPayee/PayerPayee";
+import api from "../../utils/api";
+import Alert from '../Alert/Alert';
+import { useNavigate } from "react-router-dom";
 
 // PayeeDropdown Component
 const PayeeDropdown = ({ value, onChange, onAddNew }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Mock data - replace with your actual data
   const { suppliers, customers, employees } = useMemo(
     () => ({
       suppliers: [
@@ -31,7 +33,6 @@ const PayeeDropdown = ({ value, onChange, onAddNew }) => {
 
   const filteredGroups = useMemo(() => {
     const lowerSearch = searchTerm.toLowerCase();
-
     const filterItems = (items) =>
       items.filter((item) => item.name.toLowerCase().includes(lowerSearch));
 
@@ -78,9 +79,8 @@ const PayeeDropdown = ({ value, onChange, onAddNew }) => {
           <span className="text-gray-400">Select payee/payer</span>
         )}
         <svg
-          className={`w-4 h-4 ml-2 transition-transform ${
-            isOpen ? "rotate-180" : ""
-          }`}
+          className={`w-4 h-4 ml-2 transition-transform ${isOpen ? "rotate-180" : ""
+            }`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -95,7 +95,7 @@ const PayeeDropdown = ({ value, onChange, onAddNew }) => {
       </div>
 
       {isOpen && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-96 overflow-y-auto">
+        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
           <div className="sticky top-0 bg-white p-2 border-b">
             <div className="relative">
               <MdSearch className="absolute left-3 top-3 text-gray-400" />
@@ -120,9 +120,8 @@ const PayeeDropdown = ({ value, onChange, onAddNew }) => {
                 {group.items.map((item) => (
                   <div
                     key={item.id}
-                    className={`px-4 py-2 cursor-pointer hover:bg-blue-50 ${
-                      value === item.id ? "bg-blue-100" : ""
-                    }`}
+                    className={`px-4 py-2 cursor-pointer hover:bg-blue-50 ${value === item.id ? "bg-blue-100" : ""
+                      }`}
                     onClick={() => {
                       onChange(item.id);
                       setIsOpen(false);
@@ -136,9 +135,6 @@ const PayeeDropdown = ({ value, onChange, onAddNew }) => {
                         </span>
                       )}
                     </div>
-                    {item.role && (
-                      <div className="text-xs text-gray-400">{item.role}</div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -162,6 +158,27 @@ const MoneyTransaction = ({ type }) => {
   const [modalTransition, setModalTransition] = useState("opacity-0 invisible");
   const [selectedPayee, setSelectedPayee] = useState(null);
 
+  const [accounts, setAccounts] = useState([]);
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [isLoadingAccounts, setIsLoadingAccounts] = useState(true);
+
+  const navigate = useNavigate();
+
+  const [selectedBankCode, setSelectedBankCode] = useState("");
+  const [referenceNumber, setReferenceNumber] = useState("");
+  const [generalDescription, setGeneralDescription] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [rows, setRows] = useState([
+    {
+      accountCode: "",
+      amount: "0.00",
+      description: "",
+    },
+  ]);
+
+  const [date, setDate] = useState("");
+
   useEffect(() => {
     if (showContactModal || showAccountModal || showProjectModal) {
       setModalTransition("opacity-100 visible");
@@ -176,36 +193,44 @@ const MoneyTransaction = ({ type }) => {
     }
   };
 
-  const [rows, setRows] = useState([
-    {
-      account: "",
-      amount: "0.00",
-      quantity: "0",
-      description: "",
-      project: "",
-    },
-  ]);
-
-  const [date, setDate] = useState("");
-
   useEffect(() => {
     const today = new Date();
     const formattedDate = today.toISOString().split("T")[0];
     setDate(formattedDate);
+    setReferenceNumber(`TRX-${Math.floor(Math.random() * 1000000)}`);
   }, []);
 
-  const addRow = () => {
-    setRows([
-      ...rows,
-      {
-        account: "",
-        amount: "0.00",
-        quantity: "0",
-        description: "",
-        project: "",
-      },
-    ]);
+  const fetchAccounts = async () => {
+    try {
+      setIsLoadingAccounts(true);
+      const companyId = sessionStorage.getItem("companyId");
+      if (!companyId) return;
+
+      const response = await api.get(`/api/companies/${companyId}/accounts`);
+      let accountsData = response.data || response;
+
+      if (!Array.isArray(accountsData)) {
+        throw new Error("Invalid accounts structure");
+      }
+
+      setAccounts(accountsData);
+
+      const banks = accountsData.filter(a => a.accountType === "ASSET_BANK");
+      setBankAccounts(banks);
+      if (banks.length > 0) {
+        setSelectedBankCode(banks[0].accountCode);
+      }
+    } catch (error) {
+      console.error("Error fetching accounts:", error);
+      Alert.error("Failed to load accounts");
+    } finally {
+      setIsLoadingAccounts(false);
+    }
   };
+
+  useEffect(() => {
+    fetchAccounts();
+  }, []);
 
   const handleRowChange = (index, field, value) => {
     const updatedRows = [...rows];
@@ -213,14 +238,11 @@ const MoneyTransaction = ({ type }) => {
 
     if (index === rows.length - 1 && value.trim() !== "") {
       updatedRows.push({
-        account: "",
+        accountCode: "",
         amount: "0.00",
-        quantity: "0",
         description: "",
-        project: "",
       });
     }
-
     setRows(updatedRows);
   };
 
@@ -229,12 +251,84 @@ const MoneyTransaction = ({ type }) => {
     setRows(updatedRows);
   };
 
+  const totalAmount = rows.reduce((acc, row) => acc + (parseFloat(row.amount) || 0), 0);
+
+  const handleRecord = async () => {
+    if (!selectedBankCode) {
+      Alert.error("Please select a bank account");
+      return;
+    }
+
+    const validRows = rows.filter(r => r.accountCode && parseFloat(r.amount) > 0);
+    if (validRows.length === 0) {
+      Alert.error("Please add at least one valid line item with an account and amount > 0");
+      return;
+    }
+
+    if (!date) {
+      Alert.error("Please select a date");
+      return;
+    }
+
+    setIsSubmitting(true);
+    const companyId = sessionStorage.getItem("companyId");
+
+    // Construct the payload for Journal Entry 
+    try {
+      const payload = {
+        entryType: type === "spend" ? "PAYMENT" : "RECEIPT",
+        entryDate: date,
+        journalTitle: type === "spend" ? "Spend Money" : "Receive Money",
+        referenceNo: referenceNumber,
+        description: generalDescription || `Money ${type === "spend" ? "spent from" : "received into"} bank`,
+        companyId: parseInt(companyId),
+        lines: []
+      };
+
+      // For Spend Money: Bank is Credited (debit: false), other lines are Debited (debit: true)
+      // For Receive Money: Bank is Debited (debit: true), other lines are Credited (debit: false)
+      const isBankDebit = type === "receive";
+
+      // Add the Bank Account line
+      payload.lines.push({
+        accountCode: selectedBankCode,
+        amount: totalAmount,
+        debit: isBankDebit,
+        description: generalDescription || `Money ${type === "spend" ? "spent" : "received"}`
+      });
+
+      // Add the detail lines
+      validRows.forEach(row => {
+        payload.lines.push({
+          accountCode: row.accountCode,
+          amount: parseFloat(row.amount),
+          debit: !isBankDebit,
+          description: row.description || `Transaction detail`
+        });
+      });
+
+      const res = await api.post(`/api/companies/${companyId}/journal-entries`, payload);
+      Alert.success(type === "spend" ? "Spend Money recorded successfully!" : "Receive Money recorded successfully!");
+
+      // Reset form
+      setRows([{ accountCode: "", amount: "0.00", description: "" }]);
+      setGeneralDescription("");
+      setReferenceNumber(`TRX-${Math.floor(Math.random() * 1000000)}`);
+      setSelectedPayee(null);
+    } catch (err) {
+      console.error("Failed to record transaction:", err);
+      Alert.error(err.response?.data?.error || "Failed to record transaction. Be sure Debit/Credit balances match.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto bg-white shadow-lg rounded-lg p-4 sm:p-6 mt-4 sm:mt-6">
       <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">
         {type === "spend"
-          ? " Spend Money Transaction"
-          : " Receive Money Transaction"}
+          ? "Spend Money Transaction"
+          : "Receive Money Transaction"}
       </h2>
 
       <div className="space-y-4">
@@ -243,8 +337,19 @@ const MoneyTransaction = ({ type }) => {
             <label className="block text-gray-700 font-medium">
               Bank Account <span className="text-red-500">*</span>
             </label>
-            <select className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
-              <option>1-1110 Business Bank Account #1</option>
+            <select
+              value={selectedBankCode}
+              onChange={(e) => setSelectedBankCode(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base">
+              {isLoadingAccounts ? (
+                <option>Loading...</option>
+              ) : bankAccounts.length > 0 ? (
+                bankAccounts.map(b => (
+                  <option key={b.id} value={b.accountCode}>{b.accountCode} - {b.accountName}</option>
+                ))
+              ) : (
+                <option value="">No bank accounts found</option>
+              )}
             </select>
           </div>
           <div>
@@ -253,8 +358,8 @@ const MoneyTransaction = ({ type }) => {
             </label>
             <input
               type="text"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-              defaultValue="1"
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base bg-gray-100"
+              value={referenceNumber}
               readOnly
             />
           </div>
@@ -301,6 +406,8 @@ const MoneyTransaction = ({ type }) => {
           <textarea
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
             rows={3}
+            value={generalDescription}
+            onChange={(e) => setGeneralDescription(e.target.value)}
           ></textarea>
         </div>
 
@@ -308,7 +415,7 @@ const MoneyTransaction = ({ type }) => {
           <table className="w-full rounded-lg">
             <thead>
               <tr className="bg-gray-100 text-gray-700 text-sm">
-                <th className="p-2">
+                <th className="p-2 text-left">
                   Account <span className="text-red-500">*</span>{" "}
                   <button
                     onClick={() => setShowAccountModal(true)}
@@ -317,20 +424,10 @@ const MoneyTransaction = ({ type }) => {
                     <MdAddCircleOutline className="h-5 w-5" />
                   </button>
                 </th>
-                <th className="p-2">
+                <th className="p-2 text-left">
                   Amount ($) <span className="text-red-500">*</span>
                 </th>
-                <th className="p-2">Quantity</th>
-                <th className="p-2">Description</th>
-                <th className="p-2">
-                  Project{" "}
-                  <button
-                    onClick={() => setShowProjectModal(true)}
-                    className="ml-2  text-blue-600 hover:text-blue-700"
-                  >
-                    <MdAddCircleOutline className="h-5 w-5" />
-                  </button>
-                </th>
+                <th className="p-2 text-left">Description</th>
                 <th className="p-2"></th>
               </tr>
             </thead>
@@ -340,13 +437,17 @@ const MoneyTransaction = ({ type }) => {
                   <td className="p-2">
                     <select
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                      value={row.account}
+                      value={row.accountCode}
                       onChange={(e) =>
-                        handleRowChange(index, "account", e.target.value)
+                        handleRowChange(index, "accountCode", e.target.value)
                       }
                     >
-                      <option>6-1420 Donations</option>
-                      <option>6-1120 Advertising & Marketing</option>
+                      <option value="">Select Account</option>
+                      {accounts.filter(a => a.accountType !== "ASSET_BANK").map(account => (
+                        <option key={account.id} value={account.accountCode}>
+                          {account.accountCode} - {account.accountName}
+                        </option>
+                      ))}
                     </select>
                   </td>
                   <td className="p-2">
@@ -361,39 +462,16 @@ const MoneyTransaction = ({ type }) => {
                     />
                   </td>
                   <td className="p-2">
-                    <input
-                      type="number"
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                      min={0}
-                      value={row.quantity}
-                      onChange={(e) =>
-                        handleRowChange(index, "quantity", e.target.value)
-                      }
-                    />
-                  </td>
-                  <td className="p-2">
                     <textarea
-                      className="w-full px-3  border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                       value={row.description}
                       onChange={(e) =>
                         handleRowChange(index, "description", e.target.value)
                       }
-                      rows={2}
+                      rows={1}
                     />
                   </td>
-                  <td className="p-2">
-                    <select
-                      className=" px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                      value={row.project}
-                      onChange={(e) =>
-                        handleRowChange(index, "project", e.target.value)
-                      }
-                    >
-                      <option>project-1</option>
-                      <option>project-2</option>
-                    </select>
-                  </td>
-                  <td className="p-2">
+                  <td className="p-2 text-center">
                     {index !== rows.length - 1 && (
                       <button
                         onClick={() => removeRow(index)}
@@ -410,33 +488,22 @@ const MoneyTransaction = ({ type }) => {
         </div>
 
         <div className="flex flex-col sm:flex-row justify-between items-center mt-4 space-y-4 sm:space-y-0">
-          {/* <div className="flex space-x-2">
-            <button className="bg-gray-200 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-300 text-sm sm:text-base">
-              Save as recurring
-            </button>
-            <button className="bg-gray-200 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-300 text-sm sm:text-base">
-              Prefill from recurring
-            </button>
-          </div> */}
-          <div className="text-center sm:text-right">
-            <span className="font-semibold text-gray-900">Subtotal: $0.00</span>
-            <span className="ml-4 font-semibold text-gray-900">Tax: $0.00</span>
-            <span className="ml-4 font-semibold text-gray-900">
-              Total: $0.00
+          <div className="text-center sm:text-right w-full flex justify-end items-center mr-4">
+            <span className="font-semibold text-gray-900 text-lg">
+              Total: ${totalAmount.toFixed(2)}
             </span>
           </div>
           <div className="flex space-x-2">
-            {/* <button className="bg-gray-500 text-white px-3 py-2 rounded-lg hover:bg-gray-600 text-sm sm:text-base">
-              Cancel
-            </button> */}
-            <button className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 text-sm sm:text-base">
-              Record
+            <button
+              onClick={handleRecord}
+              disabled={isSubmitting}
+              className="bg-blue-600 w-32 justify-center flex text-white px-3 py-2 rounded-lg hover:bg-blue-700 text-sm sm:text-base disabled:opacity-50">
+              {isSubmitting ? "Saving..." : "Record"}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Modal for creating a new contact */}
       {showContactModal && (
         <div
           className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 transition-opacity duration-500 ${modalTransition}`}
@@ -462,7 +529,10 @@ const MoneyTransaction = ({ type }) => {
           <div className="w-11/12 sm:w-3/4 md:w-1/2 lg:w-2/5 xl:w-1/3  p-2 rounded-lg max-h-[90vh] overflow-y-auto relative">
             <button
               className="absolute top-2 right-2 text-black-600 text-xl"
-              onClick={() => setShowAccountModal(false)}
+              onClick={() => {
+                setShowAccountModal(false);
+                fetchAccounts(); // refresh accounts when modal closes
+              }}
             >
               <FaTimes />
             </button>

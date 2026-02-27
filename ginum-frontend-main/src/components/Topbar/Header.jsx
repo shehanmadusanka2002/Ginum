@@ -8,14 +8,7 @@ const Header = ({ toggleSidebar, isSidebarVisible }) => {
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isNotificationDropdownOpen, setIsNotificationDropdownOpen] =
     useState(false);
-  const [notifications, setNotifications] = useState([
-    { id: 1, text: "New message from John", read: false },
-    { id: 2, text: "Your order has been shipped", read: true },
-    { id: 3, text: "Reminder: Meeting at 3 PM", read: false },
-    { id: 4, text: "Reminder: Meeting at 4 PM", read: false },
-    { id: 5, text: "Reminder: Meeting at 6 PM", read: true },
-    { id: 6, text: "Reminder: Meeting at 7 PM", read: false },
-  ]);
+  const [notifications, setNotifications] = useState([]);
   const dropdownRef = useRef(null);
   const notificationRef = useRef(null);
   const navigate = useNavigate();
@@ -73,6 +66,15 @@ const Header = ({ toggleSidebar, isSidebarVisible }) => {
     roleText: "Admin"
   });
 
+  const fetchNotifications = async (companyId) => {
+    try {
+      const res = await api.get(`/api/companies/${companyId}/notifications`);
+      setNotifications(res.data || res);
+    } catch (err) {
+      console.error("Failed to load notifications", err);
+    }
+  };
+
   useEffect(() => {
     const fetchCompanyData = async () => {
       const companyId = sessionStorage.getItem("companyId");
@@ -98,6 +100,10 @@ const Header = ({ toggleSidebar, isSidebarVisible }) => {
               : "https://via.placeholder.com/150",
             roleText: "Company Admin"
           });
+
+          // Fetch notifications dynamically now
+          fetchNotifications(companyId);
+
         } catch (error) {
           console.error("Error fetching company profile:", error);
           setCompanyProfile({
@@ -112,12 +118,18 @@ const Header = ({ toggleSidebar, isSidebarVisible }) => {
   }, []);
 
   // Function to mark a notification as read
-  const markNotificationAsRead = (id) => {
-    setNotifications((prevNotifications) =>
-      prevNotifications.map((notification) =>
-        notification.id === id ? { ...notification, read: true } : notification
-      )
-    );
+  const markNotificationAsRead = async (id) => {
+    const companyId = sessionStorage.getItem("companyId");
+    try {
+      await api.put(`/api/companies/${companyId}/notifications/${id}/read`);
+      setNotifications((prevNotifications) =>
+        prevNotifications.map((notification) =>
+          notification.id === id ? { ...notification, readStatus: true } : notification
+        )
+      );
+    } catch (err) {
+      console.error("Failed to mark as read", err);
+    }
   };
 
   // Function to handle "Show All Notifications"
@@ -128,7 +140,7 @@ const Header = ({ toggleSidebar, isSidebarVisible }) => {
   };
 
   // Count of unread notifications
-  const unreadNotificationsCount = notifications.filter((n) => !n.read).length;
+  const unreadNotificationsCount = notifications.filter((n) => !n.readStatus).length;
 
   return (
     <div
@@ -175,12 +187,12 @@ const Header = ({ toggleSidebar, isSidebarVisible }) => {
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`px-4 py-2 ${notification.read ? "bg-gray-50" : "bg-blue-50"
+                  className={`px-4 py-2 ${notification.readStatus ? "bg-gray-50" : "bg-blue-50"
                     } hover:bg-gray-100 cursor-pointer`}
                   onClick={() => markNotificationAsRead(notification.id)}
                 >
-                  <p className="text-sm text-gray-700">{notification.text}</p>
-                  {!notification.read && (
+                  <p className="text-sm text-gray-700">{notification.message}</p>
+                  {!notification.readStatus && (
                     <span className="text-xs text-blue-500">New</span>
                   )}
                 </div>

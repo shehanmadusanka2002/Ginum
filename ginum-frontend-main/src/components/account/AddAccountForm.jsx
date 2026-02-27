@@ -55,27 +55,33 @@ const AddAccountForm = () => {
       return;
     }
 
-    // Prepare request body
-    const requestData = {
-      accountName: accountName.trim(),
-      accountType: accountTypeMap[accountType] || accountType.toUpperCase(),
-      currentBalance: parseFloat(openingBalance) || 0,
-      subAccount: subAccount.trim(),
-    };
-
-    // console.log("Request Payload:", requestData); // Debugging log
-
     try {
-      const response = await api.post(
-        `/api/companies/${companyId}/accounts`,
-        requestData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      let endpoint = `/api/companies/${companyId}/accounts`;
+      let payload = {
+        accountName: accountName.trim(),
+        accountType: accountTypeMap[accountType] || accountType.toUpperCase(),
+        currentBalance: parseFloat(openingBalance) || 0,
+        subAccount: subAccount.trim() || null,
+      };
+
+      if (accountType === "Bank") {
+        endpoint = `/api/companies/${companyId}/bank-accounts`;
+        payload = {
+          bankName: bankName.trim(),
+          branchName: bankBranch.trim(),
+          accountNumber: bankAccountNumber.trim(),
+          subAccountName: subAccount.trim() || null,
+          currentBalance: parseFloat(openingBalance) || 0,
+          accountName: accountName.trim(),
+        };
+      }
+
+      const response = await api.post(endpoint, payload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
 
       Alert.success("Account added successfully!");
 
@@ -83,7 +89,7 @@ const AddAccountForm = () => {
       setAccountType("");
       setAccountName("");
       setOpeningBalance("");
-      setSubAccount(""); // Clear subAccount field
+      setSubAccount("");
       setBankName("");
       setBankAccountNumber("");
       setBankBranch("");

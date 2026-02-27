@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom"; // Import useSearchParams
 import ResetPassword from "../../components/ResetPassword/ResetPassword";
+import CompanyInformationSettings from "../../components/settings/CompanyInformationSettings";
 
 const SettingsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams(); // Get search params
@@ -25,7 +26,7 @@ const SettingsPage = () => {
 
   return (
     <div className="flex items-center justify-center py-4">
-      <div className="w-full max-w-4xl bg-white rounded-lg shadow-md p-4 flex flex-col">
+      <div className="w-full max-w-6xl bg-white rounded-lg shadow-md p-4 flex flex-col">
         {/* Sections Navigation */}
         <div className="flex flex-wrap border-b border-gray-300 overflow-x-auto">
           {[
@@ -35,11 +36,10 @@ const SettingsPage = () => {
           ].map((section) => (
             <button
               key={section.key}
-              className={`py-2 px-4 text-lg font-medium flex-1 sm:flex-none text-center ${
-                activeSection === section.key
+              className={`py-2 px-4 text-lg font-medium flex-1 sm:flex-none text-center ${activeSection === section.key
                   ? "border-b-2 border-blue-500 text-blue-500"
                   : "text-gray-500 hover:text-gray-700"
-              }`}
+                }`}
               onClick={() => handleSectionChange(section.key)}
             >
               {section.label}
@@ -48,15 +48,8 @@ const SettingsPage = () => {
         </div>
 
         {/* Section Content */}
-        <div className="mt-6 p-3">
-          {activeSection === "company" && (
-            <div>
-              <h2 className="text-xl font-semibold mb-2">
-                Company Information
-              </h2>
-              <p className="text-gray-600">Manage your company details here.</p>
-            </div>
-          )}
+        <div className="mt-6 p-4">
+          {activeSection === "company" && <CompanyInformationSettings />}
 
           {activeSection === "taxes" && (
             <div>
