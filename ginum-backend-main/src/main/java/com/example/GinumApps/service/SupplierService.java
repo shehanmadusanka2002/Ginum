@@ -30,11 +30,11 @@ public class SupplierService {
 
         // Validate company exists
         Company company = companyRepository.findById(supplierDto.getCompanyId())
-                .orElseThrow(() -> new ResourceNotFoundException("Company not found with id: " + supplierDto.getCompanyId()));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Company not found with id: " + supplierDto.getCompanyId()));
 
         Currency currency = currencyRepository.findById(supplierDto.getCurrencyId())
                 .orElseThrow(() -> new ResourceNotFoundException("Currency not found"));
-
 
         Supplier supplier = new Supplier();
         supplier.setCompany(company);
@@ -58,34 +58,36 @@ public class SupplierService {
         return supplierRepository.save(supplier);
     }
 
-//    public List<SupplierDto> getSuppliersByCompanyId(Integer companyId) {
-//
-//        // Verify company exists first
-//        companyRepository.findById(companyId)
-//                .orElseThrow(() -> new ResourceNotFoundException("Company not found with id: " + companyId));
-//
-//        List<Supplier> suppliers = supplierRepository.findByCompany_CompanyId(companyId);
-//        return suppliers.isEmpty() ?
-//                Collections.emptyList() :
-//                suppliers.stream().map(this::convertToDto).collect(Collectors.toList());
-//    }
-//    private SupplierDto convertToDto(Supplier supplier) {
-//        return SupplierDto.builder()
-////                .id(supplier.getId())
-//                .supplierName(supplier.getSupplierName())
-//                .email(supplier.getEmail())
-//                .mobileNo(supplier.getMobileNo())
-//                .address(supplier.getAddress())
-//                .supplierType(supplier.getSupplierType())
-//                .tinNo(supplier.getTinNo())
-//                .tax(supplier.getTax())
-//                .currencyId(supplier.getCurrency().getId())
-//                .itemCategory(supplier.getItemCategory())
-//                .swiftNo(supplier.getSwiftNo())
-//                .discountPercentage(supplier.getDiscountPercentage())
-//                .companyId(supplier.getCompany().getCompanyId())
-//                .build();
-//    }
+    // public List<SupplierDto> getSuppliersByCompanyId(Integer companyId) {
+    //
+    // // Verify company exists first
+    // companyRepository.findById(companyId)
+    // .orElseThrow(() -> new ResourceNotFoundException("Company not found with id:
+    // " + companyId));
+    //
+    // List<Supplier> suppliers =
+    // supplierRepository.findByCompany_CompanyId(companyId);
+    // return suppliers.isEmpty() ?
+    // Collections.emptyList() :
+    // suppliers.stream().map(this::convertToDto).collect(Collectors.toList());
+    // }
+    // private SupplierDto convertToDto(Supplier supplier) {
+    // return SupplierDto.builder()
+    //// .id(supplier.getId())
+    // .supplierName(supplier.getSupplierName())
+    // .email(supplier.getEmail())
+    // .mobileNo(supplier.getMobileNo())
+    // .address(supplier.getAddress())
+    // .supplierType(supplier.getSupplierType())
+    // .tinNo(supplier.getTinNo())
+    // .tax(supplier.getTax())
+    // .currencyId(supplier.getCurrency().getId())
+    // .itemCategory(supplier.getItemCategory())
+    // .swiftNo(supplier.getSwiftNo())
+    // .discountPercentage(supplier.getDiscountPercentage())
+    // .companyId(supplier.getCompany().getCompanyId())
+    // .build();
+    // }
 
     public List<SupplierSummaryDto> getSuppliersByCompanyId(Integer companyId) {
         companyRepository.findById(companyId)
@@ -99,6 +101,7 @@ public class SupplierService {
 
     private SupplierSummaryDto convertToSummaryDto(Supplier supplier) {
         return SupplierSummaryDto.builder()
+                .id(supplier.getId())
                 .supplierName(supplier.getSupplierName())
                 .email(supplier.getEmail())
                 .mobileNo(supplier.getMobileNo())
@@ -107,5 +110,17 @@ public class SupplierService {
                 .tax(supplier.getTax())
                 .itemCategory(supplier.getItemCategory().name())
                 .build();
+    }
+
+    @Transactional
+    public void deleteSupplier(Integer companyId, Long supplierId) {
+        Supplier supplier = supplierRepository.findById(supplierId)
+                .orElseThrow(() -> new ResourceNotFoundException("Supplier not found"));
+
+        if (!supplier.getCompany().getCompanyId().equals(companyId)) {
+            throw new RuntimeException("Unauthorized: Supplier does not belong to this company");
+        }
+
+        supplierRepository.delete(supplier);
     }
 }

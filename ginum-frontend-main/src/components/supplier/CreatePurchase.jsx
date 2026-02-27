@@ -23,10 +23,22 @@ const CreatePurchase = () => {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [showItemModal, setShowItemModal] = useState(false);
+  const [poNumber, setPoNumber] = useState("");
+  const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
   const [modalTransition, setModalTransition] = useState("opacity-0 invisible");
+  const [suppliers, setSuppliers] = useState([]);
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(true);
+  const [suppliersError, setSuppliersError] = useState(null);
+
   const [accounts, setAccounts] = useState([]);
   const [accountsError, setAccountsError] = useState(null);
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(true);
+
+  const [items, setItems] = useState([]);
+  const [isLoadingItems, setIsLoadingItems] = useState(true);
+
+  const [projects, setProjects] = useState([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [subtotal, setSubtotal] = useState(0);
   const [freight, setFreight] = useState(0);
   const [tax, setTax] = useState(0);
@@ -113,31 +125,66 @@ const CreatePurchase = () => {
       }
     };
 
+    const fetchSuppliers = async () => {
+      try {
+        setIsLoadingSuppliers(true);
+        setSuppliersError(null);
+        const companyId = sessionStorage.getItem("companyId");
+        if (!companyId) return;
+
+        const data = await api.get(`/api/suppliers/companies/${companyId}`);
+        setSuppliers(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Error fetching suppliers:", error);
+        setSuppliersError(error.message);
+        setSuppliers([]);
+      } finally {
+        setIsLoadingSuppliers(false);
+      }
+    };
+
+    const fetchItemsAndProjects = async () => {
+      try {
+        setIsLoadingItems(true);
+        setIsLoadingProjects(true);
+        const companyId = sessionStorage.getItem("companyId");
+        if (!companyId) return;
+
+        const [itemsRes, projectsRes] = await Promise.all([
+          api.get(`/api/companies/${companyId}/items`).catch(() => []),
+          api.get(`/api/companies/${companyId}/projects`).catch(() => [])
+        ]);
+
+        setItems(Array.isArray(itemsRes) ? itemsRes : []);
+        setProjects(Array.isArray(projectsRes) ? projectsRes : []);
+      } catch (error) {
+        console.error("Error fetching items or projects:", error);
+      } finally {
+        setIsLoadingItems(false);
+        setIsLoadingProjects(false);
+      }
+    };
+
+    const fetchPoNumber = async () => {
+      try {
+        const companyId = sessionStorage.getItem("companyId");
+        if (!companyId) return;
+
+        const response = await api.get(`/api/${companyId}/purchase-orders/next-po-number`);
+        if (response && response.poNumber) {
+          setPoNumber(response.poNumber);
+        }
+      } catch (error) {
+        console.error("Error fetching next PO number:", error);
+      }
+    };
+
     fetchAccounts();
+    fetchSuppliers();
+    fetchItemsAndProjects();
+    fetchPoNumber();
   }, []);
 
-  // Sample list of suppliers
-  const suppliers = [
-    { id: "1", name: "Supplier A" },
-    { id: "2", name: "Supplier B" },
-    { id: "3", name: "Supplier C" },
-  ];
-  // Sample data for dropdowns
-  const categories = [
-    { id: "1", name: "account A" },
-    { id: "2", name: "account B" },
-    { id: "3", name: "account C" },
-  ];
-  const projects = [
-    { id: "1", name: "project A" },
-    { id: "2", name: "project B" },
-    { id: "3", name: "project C" },
-  ];
-  const items = [
-    { id: "1", name: "Item A" },
-    { id: "2", name: "Item B" },
-    { id: "3", name: "Item C" },
-  ];
 
   const handleRowChange = (index, field, value) => {
     const updatedRows = [...rows];
@@ -191,13 +238,22 @@ const CreatePurchase = () => {
             value={selectedSupplier}
             onChange={(e) => setSelectedSupplier(e.target.value)}
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+            disabled={isLoadingSuppliers}
           >
             <option value="">Select a supplier</option>
-            {suppliers.map((supplier) => (
-              <option key={supplier.id} value={supplier.id}>
-                {supplier.name}
-              </option>
-            ))}
+            {isLoadingSuppliers ? (
+              <option value="">Loading suppliers...</option>
+            ) : suppliersError ? (
+              <option value="">Error loading suppliers</option>
+            ) : suppliers.length === 0 ? (
+              <option value="">No suppliers available</option>
+            ) : (
+              suppliers.map((supplier) => (
+                <option key={supplier.id} value={supplier.id}>
+                  {supplier.supplierName}
+                </option>
+              ))
+            )}
           </select>
         </div>
         <div>
@@ -206,8 +262,10 @@ const CreatePurchase = () => {
           </label>
           <input
             type="text"
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base bg-gray-100"
             placeholder="00000001"
+            value={poNumber}
+            readOnly
           />
         </div>
       </div>
@@ -222,6 +280,8 @@ const CreatePurchase = () => {
             type="text"
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
             placeholder="Supplier Invoice Number"
+            value={supplierInvoiceNumber}
+            onChange={(e) => setSupplierInvoiceNumber(e.target.value)}
           />
         </div>
         <div>
@@ -327,9 +387,10 @@ const CreatePurchase = () => {
                         handleRowChange(index, "itemId", e.target.value)
                       }
                       className=" px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                      disabled={isLoadingItems}
                     >
                       <option value="">Select Item</option>
-                      {items.map((item) => (
+                      {!isLoadingItems && items.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.name}
                         </option>
@@ -376,7 +437,7 @@ const CreatePurchase = () => {
                 {!isServiceMode && (
                   <>
                     <td className="p-2">
-                    <input
+                      <input
                         type="number"
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                         // placeholder="No of units"
@@ -389,7 +450,7 @@ const CreatePurchase = () => {
                       />
                     </td>
                     <td className="p-2">
-                    <input
+                      <input
                         type="number"
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                         // placeholder="Unit price"
@@ -402,7 +463,7 @@ const CreatePurchase = () => {
                       />
                     </td>
                     <td className="p-2">
-                    <input
+                      <input
                         type="number"
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                         placeholder="(%)"
@@ -418,7 +479,7 @@ const CreatePurchase = () => {
                   </>
                 )}
                 <td className="p-2">
-                <input
+                  <input
                     type="number"
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                     placeholder="Amount ($)"
@@ -438,9 +499,10 @@ const CreatePurchase = () => {
                       handleRowChange(index, "project", e.target.value)
                     }
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                    disabled={isLoadingProjects}
                   >
                     <option value="">Select project</option>
-                    {projects.map((project) => (
+                    {!isLoadingProjects && projects.map((project) => (
                       <option key={project.id} value={project.id}>
                         {project.name}
                       </option>
@@ -516,19 +578,19 @@ const CreatePurchase = () => {
           <span className="text-gray-900">${balanceDue.toFixed(2)}</span>
         </div>
         {balanceDue > 0 && (
-        <div className="w-full md:w-1/2 flex justify-between items-center">
-          <label className="block text-gray-700 font-medium">
-            Promised Date : <span className="text-red-500">*</span>
-          </label>
-          <input
+          <div className="w-full md:w-1/2 flex justify-between items-center">
+            <label className="block text-gray-700 font-medium">
+              Promised Date : <span className="text-red-500">*</span>
+            </label>
+            <input
               type="date"
               className="w-1/2 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               required
             />
-        </div>
-           )}
+          </div>
+        )}
       </div>
 
       {/* Save and Cancel Buttons */}

@@ -1,6 +1,11 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { apiUrl } from "../../utils/api";
+import Alert from "../../components/Alert/Alert";
 
 export default function AddSupplierForm() {
+  const navigate = useNavigate();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     supplier_name: "",
     email: "",
@@ -85,12 +90,75 @@ export default function AddSupplierForm() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const isValid = validateForm();
     if (isValid) {
-      console.log("Form Data Submitted:", formData);
-      // Handle form submission logic (e.g., send to backend)
+      setIsSubmitting(true);
+      try {
+        const companyId = sessionStorage.getItem("companyId");
+        const token = sessionStorage.getItem("auth_token");
+
+        if (!companyId || !token) {
+          Alert.error("Please login first");
+          setIsSubmitting(false);
+          return;
+        }
+
+        // Fix up supplierType to match Backend Enums format
+        let bSupplierType = formData.supplier_type.toUpperCase();
+        if (bSupplierType === "WHOLESALER") {
+          bSupplierType = "SUPPLIER"; // Map wholesaler to SUPPLIER or other valid type if needed, but the backend accepts MANUFACTURER, SUPPLIER, RETAILER.
+        }
+
+        const supplierDto = {
+          supplierName: formData.supplier_name,
+          email: formData.email,
+          mobileNo: formData.mobile,
+          address: formData.address,
+          supplierType: bSupplierType,
+          itemCategory: formData.item_category.toUpperCase(),
+          tinNo: formData.tin_no,
+          vat: formData.vat,
+          tax: formData.tax.toUpperCase(),
+          currencyId: formData.currency === "USD" ? 1 : formData.currency === "EUR" ? 2 : 3, // Assuming 1=USD, 2=EUR, 3=LKR or similar map
+          discountPercentage: formData.discount ? parseFloat(formData.discount) : 0,
+          companyId: parseInt(companyId),
+          swiftNo: formData.swift_no || ""
+        };
+
+        const formDataToSend = new FormData();
+        formDataToSend.append(
+          "supplier",
+          new Blob([JSON.stringify(supplierDto)], { type: "application/json" })
+        );
+
+        if (formData.br_document) {
+          formDataToSend.append("file", formData.br_document);
+        }
+
+        const response = await fetch(`${apiUrl}/api/suppliers`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formDataToSend,
+        });
+
+        if (response.ok) {
+          Alert.success("Supplier saved successfully!");
+          setTimeout(() => navigate("/app/supplier/all"), 1500);
+        } else {
+          const errorData = await response.json().catch(() => null);
+          console.log(errorData);
+          Alert.error("Failed to save supplier");
+        }
+      } catch (error) {
+        console.error("Error saving supplier:", error);
+        Alert.error("Error saving supplier");
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -186,25 +254,25 @@ export default function AddSupplierForm() {
             </div>
 
             <div className="w-full md:w-1/2 px-2">
-            <label className="block text-gray-700">
-              Item Category <span className="text-red-500">*</span>
-            </label>
-            <select
-              name="item_category"
-              value={formData.item_category}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              required
-            >
-              <option value="">Select Category</option>
-              {itemCategories.map((category, index) => (
-                <option key={index} value={category}>{category}</option>
-              ))}
-            </select>
-            {errors.item_category && (
-              <p className="text-red-500 text-sm">{errors.item_category}</p>
-            )}
-          </div>
+              <label className="block text-gray-700">
+                Item Category <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="item_category"
+                value={formData.item_category}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">Select Category</option>
+                {itemCategories.map((category, index) => (
+                  <option key={index} value={category}>{category}</option>
+                ))}
+              </select>
+              {errors.item_category && (
+                <p className="text-red-500 text-sm">{errors.item_category}</p>
+              )}
+            </div>
 
             <div className="w-full md:w-1/2 px-2">
               <label className="block text-gray-700">TIN No</label>
@@ -323,9 +391,10 @@ export default function AddSupplierForm() {
 
           <button
             type="submit"
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            disabled={isSubmitting}
           >
-            Save
+            {isSubmitting ? "Saving..." : "Save Supplier"}
           </button>
         </form>
       </div>

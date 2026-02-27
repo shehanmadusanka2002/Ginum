@@ -18,7 +18,7 @@ import java.util.List;
 @NoArgsConstructor
 public class PurchaseOrderRequestDto {
     @NotNull(message = "Supplier ID is required")
-    private Integer supplierId;
+    private Long supplierId;
 
     @NotBlank(message = "Supplier invoice number is required")
     private String supplierInvoiceNumber;
@@ -36,7 +36,6 @@ public class PurchaseOrderRequestDto {
     @Valid
     @NotEmpty
     private List<PurchaseOrderItemRequestDto> items;
-
 
     @DecimalMin(value = "0.00", message = "Freight cannot be negative")
     private BigDecimal freight = BigDecimal.ZERO;

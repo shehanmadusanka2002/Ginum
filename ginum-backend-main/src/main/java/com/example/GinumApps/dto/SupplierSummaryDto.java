@@ -8,6 +8,7 @@ import lombok.Data;
 @Data
 @Builder
 public class SupplierSummaryDto {
+    private Long id;
     private String supplierName;
     private String email;
     private String mobileNo;

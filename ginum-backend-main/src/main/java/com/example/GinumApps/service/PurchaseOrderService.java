@@ -31,18 +31,35 @@ public class PurchaseOrderService {
     private final AgingPayableSnapshotRepository agingRepo;
     private final PurchaseOrderRepository poRepo;
 
+    public String getNextPoNumber(Integer companyId) {
+        String lastPo = purchaseOrderRepo.findLastPoNumberByCompanyId(companyId.longValue());
+        if (lastPo == null || lastPo.isEmpty()) {
+            return "PO-00000001";
+        }
+        try {
+            // Strip the "PO-" prefix for incrementing
+            String numPart = lastPo.startsWith("PO-") ? lastPo.substring(3) : lastPo;
+            long nextNum = Long.parseLong(numPart) + 1;
+            return String.format("PO-%08d", nextNum);
+        } catch (NumberFormatException e) {
+            return "PO-00000001";
+        }
+    }
+
     /**
      * Creates a purchase order with full financial tracking and journal entries
-     * @param request Purchase order data from client
+     * 
+     * @param request   Purchase order data from client
      * @param companyId Authenticated company's ID
-//     * @param authorId User creating the purchase order
+     *                  // * @param authorId User creating the purchase order
      * @return Persisted purchase order with calculated financials
      * @throws ResourceNotFoundException If referenced entities not found
-     * @throws AccessDeniedException If supplier doesn't belong to company
+     * @throws AccessDeniedException     If supplier doesn't belong to company
      */
 
     @Transactional
-//    public PurchaseOrder createPurchaseOrder(PurchaseOrderRequestDto request, Integer companyId, Long authorId) {
+    // public PurchaseOrder createPurchaseOrder(PurchaseOrderRequestDto request,
+    // Integer companyId, Long authorId) {
     public PurchaseOrderResponseDto createPurchaseOrder(PurchaseOrderRequestDto request, Integer companyId) {
         // Validate company existence
         Company company = companyRepository.findById(companyId)
@@ -51,22 +68,33 @@ public class PurchaseOrderService {
         // Validate supplier existence and company association
         Supplier supplier = supplierRepo.findById(request.getSupplierId())
                 .orElseThrow(() -> new ResourceNotFoundException("Supplier not found"));
-        if (!supplier.getCompany().getCompanyId().equals(companyId)){
+        if (!supplier.getCompany().getCompanyId().equals(companyId)) {
             throw new AccessDeniedException("Supplier does not belong to your company");
+        }
+
+        // Check for duplicate supplier invoice number
+        if (request.getSupplierInvoiceNumber() != null && !request.getSupplierInvoiceNumber().trim().isEmpty()) {
+            boolean invoiceExists = purchaseOrderRepo.existsByCompany_CompanyIdAndSupplier_IdAndSupplierInvoiceNumber(
+                    companyId, supplier.getId(), request.getSupplierInvoiceNumber());
+            if (invoiceExists) {
+                throw new IllegalArgumentException(
+                        "Purchase Order with this Supplier Invoice Number already exists for this supplier.");
+            }
         }
 
         Account paymentAccount = null;
         if (request.getPaymentAccountCode() != null) {
             paymentAccount = accountRepo.findByAccountCodeAndCompany_CompanyId(
-                    request.getPaymentAccountCode(), companyId
-            ).orElseThrow(() -> new ResourceNotFoundException("Invalid payment account code"));
+                    request.getPaymentAccountCode(), companyId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Invalid payment account code"));
         }
 
         // Calculate totals
-//        BigDecimal subtotal = calculateSubtotal(request.getItems());
-//        BigDecimal total = subtotal
-//                .add(request.getFreight() != null ? request.getFreight() : BigDecimal.ZERO)
-//                .add(request.getTaxAmount() != null ? request.getTaxAmount() : BigDecimal.ZERO);
+        // BigDecimal subtotal = calculateSubtotal(request.getItems());
+        // BigDecimal total = subtotal
+        // .add(request.getFreight() != null ? request.getFreight() : BigDecimal.ZERO)
+        // .add(request.getTaxAmount() != null ? request.getTaxAmount() :
+        // BigDecimal.ZERO);
 
         // Process line items and calculate financials
         PurchaseOrder po = new PurchaseOrder();
@@ -77,8 +105,6 @@ public class PurchaseOrderService {
         po.setIssueDate(request.getIssueDate());
         po.setNotes(request.getNotes());
         po.setPaymentAccount(paymentAccount);
-
-
 
         processItems(request.getItems(), po, company);
         calculateFinancials(po, request.getFreight(), request.getTaxAmount());
@@ -91,7 +117,6 @@ public class PurchaseOrderService {
         }
         return convertToDto(savedPO);
     }
-
 
     private void createAgingSnapshot(PurchaseOrder po) {
         AgingPayableSnapshot snapshot = new AgingPayableSnapshot();
@@ -107,17 +132,17 @@ public class PurchaseOrderService {
 
     /**
      * Converts item DTOs to entities with account validation
-     * @param items Client-provided purchase items
-     * @param po Parent purchase order
+     * 
+     * @param items   Client-provided purchase items
+     * @param po      Parent purchase order
      * @param company Associated company for account verification
      */
     private void processItems(List<PurchaseOrderItemRequestDto> items, PurchaseOrder po, Company company) {
         items.forEach(itemRequest -> {
             Account account = accountRepo.findByAccountCodeAndCompany_CompanyId(
-                    itemRequest.getAccountCode(), company.getCompanyId()
-            ).orElseThrow(() -> new EntityNotFoundException(
-                    "Account not found: " + itemRequest.getAccountCode()
-            ));
+                    itemRequest.getAccountCode(), company.getCompanyId()).orElseThrow(
+                            () -> new EntityNotFoundException(
+                                    "Account not found: " + itemRequest.getAccountCode()));
             Item item = itemRepository.findById(itemRequest.getItemId())
                     .orElseThrow(() -> new EntityNotFoundException("Item not found: " + itemRequest.getItemId()));
 
@@ -135,8 +160,9 @@ public class PurchaseOrderService {
 
     /**
      * Calculates financial totals for the purchase order
-     * @param po Purchase order entity
-     * @param freight Shipping/Handling costs
+     * 
+     * @param po        Purchase order entity
+     * @param freight   Shipping/Handling costs
      * @param taxAmount Applicable taxes
      */
     private void calculateFinancials(PurchaseOrder po, BigDecimal freight, BigDecimal taxAmount) {
@@ -156,6 +182,7 @@ public class PurchaseOrderService {
 
     /**
      * Creates double-entry accounting records for the purchase
+     * 
      * @param po Completed purchase order with financials
      */
     private void createJournalEntries(PurchaseOrder po) {
@@ -165,7 +192,8 @@ public class PurchaseOrderService {
         // Set required fields from PurchaseOrder
         entryDto.setEntryType(JournalEntryType.PURCHASE);
         entryDto.setEntryDate(po.getIssueDate());
-//        entryDto.setJournalTitle("Purchase Journal " + po.getSupplierInvoiceNumber()); // Add missing journalTitle
+        // entryDto.setJournalTitle("Purchase Journal " +
+        // po.getSupplierInvoiceNumber()); // Add missing journalTitle
         entryDto.setJournalTitle("Purchase Journal ");
         entryDto.setReferenceNo(po.getSupplierInvoiceNumber());
         entryDto.setCompanyId(po.getCompany().getCompanyId());
@@ -178,15 +206,13 @@ public class PurchaseOrderService {
                     .multiply(BigDecimal.valueOf(item.getQuantity()))
                     .multiply(BigDecimal.ONE.subtract(
                             item.getDiscountPercent()
-                                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
-                    ));
+                                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)));
 
             entryDto.getLines().add(new JournalEntryLineDto(
                     item.getAccount().getAccountCode(),
                     lineTotal,
-                    true,  // Debit
-                    String.format("%s - %d units", item.getDescription(), item.getQuantity(),item.getUnitPrice())
-            ));
+                    true, // Debit
+                    String.format("%s - %d units", item.getDescription(), item.getQuantity(), item.getUnitPrice())));
         });
 
         // 2. Debit freight (if applicable)
@@ -195,8 +221,7 @@ public class PurchaseOrderService {
                     po.getCompany().getFreightAccount().getAccountCode(), // From Company
                     po.getFreight(),
                     true,
-                    "Freight charges"
-            ));
+                    "Freight charges"));
         }
 
         // 3. Debit tax (if applicable)
@@ -205,8 +230,7 @@ public class PurchaseOrderService {
                     po.getCompany().getTaxAccount().getAccountCode(), // From Company
                     po.getTaxAmount(),
                     true,
-                    "Sales tax"
-            ));
+                    "Sales tax"));
         }
 
         // 4. Credit payment account if payment exists
@@ -214,9 +238,8 @@ public class PurchaseOrderService {
             entryDto.getLines().add(new JournalEntryLineDto(
                     po.getPaymentAccount().getAccountCode(),
                     po.getAmountPaid(),
-                    false,  // Credit payment account
-                    "Payment for PO #" + po.getId()
-            ));
+                    false, // Credit payment account
+                    "Payment for PO #" + po.getId()));
         }
 
         // 3. Credit accounts payable for remaining balance
@@ -224,9 +247,8 @@ public class PurchaseOrderService {
             entryDto.getLines().add(new JournalEntryLineDto(
                     po.getCompany().getAccountsPayableAccount().getAccountCode(),
                     po.getBalanceDue(),
-                    false,  // Credit liability
-                    "Payable to " + po.getSupplier().getSupplierName()
-            ));
+                    false, // Credit liability
+                    "Payable to " + po.getSupplier().getSupplierName()));
         }
         // Correct service call with proper DTO
         journalEntryService.createJournalEntry(entryDto);
@@ -237,7 +259,7 @@ public class PurchaseOrderService {
 
         // Map basic fields
         dto.setId(po.getId());
-//        dto.setPurchaseOrderNumber(po.getPurchaseOrderNumber());
+        // dto.setPurchaseOrderNumber(po.getPurchaseOrderNumber());
         dto.setSupplierId(po.getSupplier().getId());
         dto.setSupplierName(po.getSupplier().getSupplierName());
         dto.setSupplierInvoiceNumber(po.getSupplierInvoiceNumber());
@@ -259,6 +281,13 @@ public class PurchaseOrderService {
         return dto;
     }
 
+    public List<PurchaseOrderResponseDto> getAllPurchaseOrdersByCompany(Integer companyId) {
+        List<PurchaseOrder> pos = purchaseOrderRepo.findByCompany_CompanyId(companyId);
+        if (pos == null)
+            return List.of();
+        return pos.stream().map(this::convertToDto).collect(Collectors.toList());
+    }
+
     private PurchaseOrderItemResponseDto convertItemToDto(PurchaseOrderLineItem item) {
         PurchaseOrderItemResponseDto itemDto = new PurchaseOrderItemResponseDto();
         itemDto.setItemId(item.getItem().getItemId());
@@ -270,8 +299,7 @@ public class PurchaseOrderService {
         itemDto.setAmount(item.getUnitPrice()
                 .multiply(BigDecimal.valueOf(item.getQuantity()))
                 .multiply(BigDecimal.ONE.subtract(
-                        item.getDiscountPercent().divide(BigDecimal.valueOf(100))
-                )));
+                        item.getDiscountPercent().divide(BigDecimal.valueOf(100)))));
         itemDto.setAccountCode(item.getAccount().getAccountCode());
         itemDto.setProjectId(item.getProject() != null ? item.getProject().getId() : null);
         itemDto.setItemType(item.getItemType());
@@ -280,25 +308,26 @@ public class PurchaseOrderService {
     }
 
     @Transactional
-    public void payPurchaseOrder(Long poId,PurchasePaymentRequestDto request){
+    public void payPurchaseOrder(Long poId, PurchasePaymentRequestDto request) {
         PurchaseOrder po = poRepo.findById(poId).orElse(null);
         if (po == null) {
             throw new EntityNotFoundException("Purchase order not found");
         }
 
-        if(!po.getCompany().getCompanyId().equals(request.getCompanyId())){
+        if (!po.getCompany().getCompanyId().equals(request.getCompanyId())) {
             throw new AccessDeniedException("Access denied to this purchase order");
         }
 
-        if(po.getBalanceDue().compareTo(BigDecimal.ZERO) <= 0){
+        if (po.getBalanceDue().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Purchase order is already fully paid");
         }
 
-        if(request.getAmount().compareTo(po.getBalanceDue()) > 0){
+        if (request.getAmount().compareTo(po.getBalanceDue()) > 0) {
             throw new IllegalArgumentException("Payment amount exceeds balance due");
         }
 
-        Account paymentAccount = accountRepo.findByAccountCodeAndCompany_CompanyId(request.getPaymentAccountCode(), request.getCompanyId())
+        Account paymentAccount = accountRepo
+                .findByAccountCodeAndCompany_CompanyId(request.getPaymentAccountCode(), request.getCompanyId())
                 .orElseThrow(() -> new ResourceNotFoundException("Invalid payment account code"));
 
         po.setAmountPaid(po.getAmountPaid().add(request.getAmount()));
@@ -323,15 +352,13 @@ public class PurchaseOrderService {
                 paymentAccount.getAccountCode(),
                 request.getAmount(),
                 false,
-                "Payment from account for PO"
-        ));
+                "Payment from account for PO"));
 
         lines.add(new JournalEntryLineDto(
                 po.getCompany().getAccountsPayableAccount().getAccountCode(),
                 request.getAmount(),
                 true,
-                "Reduce payable for PO"
-        ));
+                "Reduce payable for PO"));
 
         journal.setLines(lines);
         journalEntryService.createJournalEntry(journal);

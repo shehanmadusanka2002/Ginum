@@ -23,8 +23,23 @@ public class PurchaseOrderController {
     public ResponseEntity<PurchaseOrderResponseDto> createPurchaseOrder(
             @PathVariable Integer companyId,
             @Valid @RequestBody PurchaseOrderRequestDto request) {
-        PurchaseOrderResponseDto response = purchaseOrderService.createPurchaseOrder(request,companyId);
+        PurchaseOrderResponseDto response = purchaseOrderService.createPurchaseOrder(request, companyId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/next-po-number")
+    public ResponseEntity<java.util.Map<String, String>> getNextPoNumber(@PathVariable Integer companyId) {
+        String nextPoNumber = purchaseOrderService.getNextPoNumber(companyId);
+        // Returning as a JSON object: {"poNumber": "00000001"}
+        java.util.Map<String, String> response = new java.util.HashMap<>();
+        response.put("poNumber", nextPoNumber);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping
+    public ResponseEntity<java.util.List<PurchaseOrderResponseDto>> getAllPurchaseOrdersByCompany(
+            @PathVariable Integer companyId) {
+        return ResponseEntity.ok(purchaseOrderService.getAllPurchaseOrdersByCompany(companyId));
     }
 
     // Exception handler for validation errors
@@ -40,6 +55,7 @@ public class PurchaseOrderController {
     public ResponseEntity<String> handleNotFoundExceptions(EntityNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
     }
+
     @ResponseStatus(HttpStatus.FORBIDDEN)
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<String> handleAccessDeniedExceptions(AccessDeniedException ex) {
@@ -49,8 +65,7 @@ public class PurchaseOrderController {
     @PostMapping("/{poId}/pay")
     public ResponseEntity<?> payPurchaseOrder(
             @PathVariable Long poId,
-            @RequestBody @Valid PurchasePaymentRequestDto request
-    ) {
+            @RequestBody @Valid PurchasePaymentRequestDto request) {
         purchaseOrderService.payPurchaseOrder(poId, request);
         return ResponseEntity.ok("Payment recorded successfully");
     }

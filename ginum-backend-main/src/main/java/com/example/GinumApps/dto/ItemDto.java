@@ -11,6 +11,8 @@ import java.math.BigDecimal;
 @Data
 @Builder
 public class ItemDto {
+    private Long id;
+
     @NotBlank
     private String name;
 
@@ -22,4 +24,3 @@ public class ItemDto {
 
     private String unit;
 }
-

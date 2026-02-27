@@ -46,4 +46,16 @@ public class SupplierController {
         List<SupplierSummaryDto> suppliers = supplierService.getSuppliersByCompanyId(companyId);
         return ResponseEntity.ok(suppliers);
     }
+
+    @DeleteMapping("/companies/{companyId}/{supplierId}")
+    public ResponseEntity<?> deleteSupplier(
+            @PathVariable Integer companyId,
+            @PathVariable Long supplierId) {
+        try {
+            supplierService.deleteSupplier(companyId, supplierId);
+            return ResponseEntity.ok(Map.of("message", "Supplier deleted successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        }
+    }
 }

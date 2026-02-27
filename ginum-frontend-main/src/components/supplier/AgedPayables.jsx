@@ -1,107 +1,66 @@
-import React, { useState } from 'react';
-
-const payablesSummaryData = [
-  {
-    supplier: 'Supplier A',
-    notDueYet: '$1,200',
-    age1: '$100',
-    age2: '$250',
-    age3: '$350',
-    total: '$1,900',
-    invoiceDate: '2025-03-01',
-  },
-  {
-    supplier: 'Supplier B',
-    notDueYet: '$2,500',
-    age1: '$300',
-    age2: '$400',
-    age3: '$700',
-    total: '$3,900',
-    invoiceDate: '2025-02-15',
-  },
-  {
-    supplier: 'Supplier C',
-    notDueYet: '$900',
-    age1: '$150',
-    age2: '$200',
-    age3: '$300',
-    total: '$1,550',
-    invoiceDate: '2025-01-10',
-  },
-];
-
-const payablesDetailData = [
-  {
-    supplier: 'Supplier A',
-    invoice: 'INV-56789',
-    invoiceDate: '2025-03-01',
-    dueDate: '2025-04-01',
-    notDueYet: '$1,200',
-    age1: '$100',
-    age2: '$250',
-    age3: '$350',
-    total: '$1,900',
-    balance: '$1,900',
-  },
-  {
-    supplier: 'Supplier B',
-    invoice: 'INV-98765',
-    invoiceDate: '2025-02-15',
-    dueDate: '2025-03-15',
-    notDueYet: '$2,500',
-    age1: '$300',
-    age2: '$400',
-    age3: '$700',
-    total: '$3,900',
-    balance: '$3,900',
-  },
-  {
-    supplier: 'Supplier C',
-    invoice: 'INV-12345',
-    invoiceDate: '2025-03-05',
-    dueDate: '2025-04-05',
-    notDueYet: '$900',
-    age1: '$150',
-    age2: '$200',
-    age3: '$300',
-    total: '$1,550',
-    balance: '$1,550',
-  },
-];
+import React, { useState, useEffect } from 'react';
+import { apiUrl } from '../../utils/api';
+import Alert from '../../components/Alert/Alert';
 
 export default function AgedPayables() {
-  const [activeTab, setActiveTab] = useState('summary');
+  const [payables, setPayables] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [dateRange, setDateRange] = useState('');
   const [page, setPage] = useState(1);
-  const itemsPerPage = 2;
+  const itemsPerPage = 10;
 
-  // Filter function based on search query and date range
+  const companyId = sessionStorage.getItem("companyId");
+  const token = sessionStorage.getItem("auth_token");
+
+  useEffect(() => {
+    const fetchPayables = async () => {
+      try {
+        if (!companyId || !token) return;
+        setLoading(true);
+        const res = await fetch(`${apiUrl}/api/companies/${companyId}/aged-payables`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setPayables(Array.isArray(data) ? data : []);
+        } else {
+          Alert.error("Failed to fetch aged payables");
+        }
+      } catch (err) {
+        console.error(err);
+        Alert.error("Error fetching aged payables");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPayables();
+  }, [companyId, token]);
+
   const filterData = (data) => {
     let filteredData = data;
 
-    // Search by supplier
     if (searchQuery) {
       filteredData = filteredData.filter((row) =>
-        row.supplier.toLowerCase().includes(searchQuery.toLowerCase())
+        row.supplier?.supplierName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        row.poNumber?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
-    // Date range filtering
     if (dateRange) {
       const today = new Date();
       filteredData = filteredData.filter((row) => {
-        const invoiceDate = new Date(row.invoiceDate);
+        const dueDate = new Date(row.dueDate);
         switch (dateRange) {
           case 'last30':
             const last30Days = new Date(today.setDate(today.getDate() - 30));
-            return invoiceDate >= last30Days;
+            return dueDate >= last30Days;
           case 'thisMonth':
-            return invoiceDate.getMonth() === today.getMonth() && invoiceDate.getFullYear() === today.getFullYear();
+            return dueDate.getMonth() === today.getMonth() && dueDate.getFullYear() === today.getFullYear();
           case 'lastMonth':
             const lastMonth = new Date(today.setMonth(today.getMonth() - 1));
             return (
-              invoiceDate.getMonth() === lastMonth.getMonth() && invoiceDate.getFullYear() === lastMonth.getFullYear()
+              dueDate.getMonth() === lastMonth.getMonth() && dueDate.getFullYear() === lastMonth.getFullYear()
             );
           default:
             return true;
@@ -112,45 +71,40 @@ export default function AgedPayables() {
     return filteredData;
   };
 
+  const filteredData = filterData(payables);
+  const paginatedData = filteredData.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
   const handleExport = () => {
-    console.log('Exporting data...');
+    Alert.info('Export functionality coming soon!');
   };
 
-  const handleSearch = (e) => {
-    setSearchQuery(e.target.value);
-  };
-
-  const handleDateRangeChange = (e) => {
-    setDateRange(e.target.value);
-  };
-
-  const handlePaginationChange = (newPage) => {
-    setPage(newPage);
-  };
-
-  // Paginate the filtered data
-  const paginatedData = filterData(activeTab === 'summary' ? payablesSummaryData : payablesDetailData)
-    .slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  if (loading) {
+    return (
+      <div className="flex justify-center flex-col items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <p className="mt-4 text-gray-500">Loading aged payables...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">Aged Payables</h1>
+    <div className="p-6 space-y-6 container mx-auto bg-gray-50 min-h-screen">
+      <h1 className="text-3xl font-bold text-gray-800">Aged Payables (Outstanding Payments)</h1>
 
-      {/* Filters and Buttons */}
-      <div className="flex space-x-4 items-center mb-4">
+      <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 space-x-0 md:space-x-4 items-center bg-white p-4 rounded-lg shadow-sm">
         <input
           type="text"
-          placeholder="Search by Supplier"
+          placeholder="Search supplier or PO..."
           value={searchQuery}
-          onChange={handleSearch}
-          className="px-4 py-2 border rounded-md shadow-sm w-1/3"
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="px-4 py-2 border rounded-md shadow-sm w-full md:w-1/3"
         />
         <select
           value={dateRange}
-          onChange={handleDateRangeChange}
-          className="px-4 py-2 border rounded-md shadow-sm"
+          onChange={(e) => setDateRange(e.target.value)}
+          className="px-4 py-2 border rounded-md shadow-sm w-full md:w-auto"
         >
-          <option value="">All Dates</option>
+          <option value="">All Due Dates</option>
           <option value="last30">Last 30 Days</option>
           <option value="thisMonth">This Month</option>
           <option value="lastMonth">Last Month</option>
@@ -158,113 +112,74 @@ export default function AgedPayables() {
 
         <button
           onClick={handleExport}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md"
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 transition-colors text-white rounded-md w-full md:w-auto"
         >
           Export
         </button>
 
-        <div className="flex space-x-2 ml-auto">
-          <button className="px-4 py-2 bg-green-600 text-white rounded-md">Create Bill</button>
-          <button className="px-4 py-2 bg-gray-600 text-white rounded-md">Add Payment</button>
+        <div className="flex space-x-2 md:ml-auto w-full md:w-auto justify-end">
+          <button className="px-4 py-2 bg-green-600 hover:bg-green-700 transition-colors text-white rounded-md">Pay Bill</button>
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="flex space-x-4 border-b">
-        <button
-          className={`px-4 py-2 text-sm font-medium ${activeTab === 'summary' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
-          onClick={() => setActiveTab('summary')}
-        >
-          Summary
-        </button>
-        <button
-          className={`px-4 py-2 text-sm font-medium ${activeTab === 'detail' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
-          onClick={() => setActiveTab('detail')}
-        >
-          Detail
-        </button>
+      <div className="bg-white shadow rounded-lg overflow-x-auto border border-gray-100">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Supplier</th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">PO #</th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Due Date</th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Not Due Yet</th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">1–30 Days</th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">31–60 Days</th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">61–90 Days</th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">91+ Days</th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Total Balance</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {paginatedData.length === 0 ? (
+              <tr>
+                <td colSpan="9" className="px-6 py-8 text-center text-gray-500">
+                  {payables.length === 0 ? "No aged payables found." : "No payables match your filters."}
+                </td>
+              </tr>
+            ) : paginatedData.map((row) => {
+              const notDueYet = row.balanceDue - (row.bucket0to30 + row.bucket31to60 + row.bucket61to90 + row.bucket91plus);
+              return (
+                <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{row.supplier?.supplierName || "Unknown"}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 font-medium">{row.poNumber}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{row.dueDate}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">${Math.max(0, notDueYet).toFixed(2)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-yellow-600 font-medium">${row.bucket0to30?.toFixed(2) || '0.00'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-orange-500 font-medium">${row.bucket31to60?.toFixed(2) || '0.00'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-orange-600 font-medium">${row.bucket61to90?.toFixed(2) || '0.00'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 font-bold">${row.bucket91plus?.toFixed(2) || '0.00'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold">${row.balanceDue?.toFixed(2) || '0.00'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
 
-      {/* Tab Content */}
-      {activeTab === 'summary' ? (
-        <div className="mt-6 bg-white shadow rounded-lg overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Supplier</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Not Due Yet</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">1–30</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">31–60</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">61–90+</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Total</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {paginatedData.map((row, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.supplier}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.notDueYet}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.age1}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.age2}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.age3}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.total}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm">
+        <div className="text-sm text-gray-600 block w-full text-center sm:text-left sm:w-auto">
+          Showing page <span className="font-semibold">{page}</span> of {Math.max(1, Math.ceil(filteredData.length / itemsPerPage))}
         </div>
-      ) : (
-        <div className="mt-6 bg-white shadow rounded-lg overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Supplier</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Invoice</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Invoice Date</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Due Date</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Not Due Yet</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">1–30</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">31–60</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">61–90+</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Total</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Balance</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {paginatedData.map((row, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.supplier}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.invoice}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.invoiceDate}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.dueDate}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.notDueYet}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.age1}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.age2}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.age3}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.total}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.balance}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Pagination */}
-      <div className="mt-4 flex justify-between items-center">
-        <div className="text-sm text-gray-600">Page {page}</div>
-        <div className="flex space-x-2">
+        <div className="flex justify-center w-full sm:w-auto mt-4 sm:mt-0 space-x-2">
           <button
-            onClick={() => handlePaginationChange(page - 1)}
+            onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md"
+            className="px-3 py-1 bg-gray-100 disabled:opacity-50 text-gray-700 rounded border hover:bg-gray-200 transition-colors"
           >
             Previous
           </button>
           <button
-            onClick={() => handlePaginationChange(page + 1)}
-            disabled={page * itemsPerPage >= (activeTab === 'summary' ? payablesSummaryData.length : payablesDetailData.length)}
-            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md"
+            onClick={() => setPage(p => p + 1)}
+            disabled={page * itemsPerPage >= filteredData.length}
+            className="px-3 py-1 bg-gray-100 disabled:opacity-50 text-gray-700 rounded border hover:bg-gray-200 transition-colors"
           >
             Next
           </button>

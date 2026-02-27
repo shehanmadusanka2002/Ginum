@@ -41,6 +41,7 @@ public class ItemService {
 
     private ItemDto toDto(Item item) {
         return ItemDto.builder()
+                .id(item.getItemId())
                 .name(item.getName())
                 .description(item.getDescription())
                 .unitPrice(item.getUnitPrice())
