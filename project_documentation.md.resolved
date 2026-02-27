@@ -1,0 +1,163 @@
+# Ginuma - ERP & Accounting Web Application
+**Project Documentation**
+
+## 1. Project Overview
+Ginuma is a comprehensive multi-tenant Enterprise Resource Planning (ERP) and Accounting web application. It is designed to help small and medium-sized businesses manage their core day-to-day operations, including Human Resources, Finance, Inventory, Purchasing, and Sales. The platform supports a Super Admin role to manage the overall ecosystem and Company-level roles to manage individual business data.
+
+## 2. Technology Stack
+
+### Frontend (Client-Side)
+- **Core Framework:** React 18 (using Functional Components & Hooks)
+- **Build Tool:** Vite
+- **Routing:** React Router v7
+- **Styling:** Tailwind CSS, Material-UI (MUI), Styled Components
+- **HTTP Client:** Axios (Configured with request/response interceptors for JWT)
+- **Data Visualization:** Chart.js & react-chartjs-2
+- **Alerts & Modals:** SweetAlert2
+- **Icons:** React Icons, Lucide React, Heroicons
+
+### Backend (Server-Side)
+- **Core Framework:** Spring Boot 3.4.2 (Java 17)
+- **Security:** Spring Security with JSON Web Tokens (JWT)
+- **Data Access:** Spring Data JPA (Hibernate)
+- **Database:** MySQL
+- **API Documentation:** Springdoc OpenAPI (Swagger UI)
+- **Utilities:** Lombok (to reduce boilerplate code)
+
+---
+
+## 3. High-Level Architecture
+The system follows a classic decoupled client-server architecture:
+1. **Frontend Presentation Layer:** Handles the user interface, routing, form validations, and data presentation. Communicates exclusively via REST APIs.
+2. **Backend API Layer:** Exposes secured RESTful endpoints. It handles business logic, security rules, input validation, and file uploads.
+3. **Persistence Layer:** A relational MySQL database handling multi-tenant data (separated normally by `company_id` foreign keys).
+
+---
+
+## 4. Key Modules & Features
+
+### A. Authentication & Authorization
+- **JWT-Based Login:** Stateless authentication mechanism.
+- **Roles:** 
+  - `ROLE_SUPER_ADMIN`: Access to system-wide settings, approving company registrations, and viewing all tenants.
+  - `ROLE_COMPANY`: Admin access for a specific registered company.
+- **Registration Flow:** Companies register with details, VAT info, and logos. Requires backend validation and default package seeding.
+
+### B. Super Admin Module
+- Dashboard overview of the entire platform.
+- Manage company registration requests.
+- Manage all registered companies and subscription packages.
+- Reset passwords.
+
+### C. Company Module (Tenant Workspace)
+Subdivided into core business operations:
+
+1. **Human Resources (HR)**
+   - **Departments & Designations:** Create and categorize organizational structures.
+   - **Employees:** Manage employee data, onboarding, and profiles.
+   - **Users:** System users (staff logging into the system) linked to roles.
+
+2. **Supplier & Purchase Management**
+   - **Suppliers:** Directory of vendors.
+   - **Purchases:** Purchase orders and invoices.
+   - **Aged Payables:** Tracking outstanding payments.
+
+3. **Customer & Sales Management**
+   - **Customers:** Directory of clients.
+   - **Quotations:** Create and send price quotes.
+   - **Sales:** Managing sales orders and invoices.
+   - **Aged Receivables:** Tracking pending income.
+
+4. **Banking & Transactions**
+   - **Bank Accounts:** Link and track internal bank/cash accounts.
+   - **Money Transactions:** Spend Money (outgoing) and Receive Money (incoming).
+   - **Bank Reconciliation:** Matching book balances with bank statements.
+   - **General Journal:** Manual double-entry accounting transactions.
+
+5. **Reporting (Financial Statements)**
+   - Dashboard Stats & Charts
+   - General Ledger
+   - Trial Balance
+   - Income Statement (Profit & Loss)
+   - Balance Sheet
+   - Cashflow Statement
+   - Daily Sales & Revenue Reports
+
+6. **Inventory & Projects**
+   - Manage stock items, track variations, and handle operations projects.
+
+---
+
+## 5. Folder Structure Details
+
+### Frontend Structure (`ginum-frontend/src/`)
+- `/components`: Reusable UI elements (Buttons, Tables, Form fields, Alerts, Topbar, Sidebar).
+- `/pages`: High-level page components (Login, Register, Dashboard, NotFound). Includes both Super Admin and Company views.
+- `/layout`: Layout wrappers like [MainLayout](file:///c:/Users/Shehan/Desktop/Ginuma_new_updates/ginum-frontend-main/src/layout/MainLayout.jsx#7-41) and `SuperAdminDashboard` that include sidebars and headers.
+- `/routes`: Routing definitions ([AppRouter.jsx](file:///c:/Users/Shehan/Desktop/Ginuma_new_updates/ginum-frontend-main/src/routes/AppRouter.jsx)) and route guards (`PrivateRoute`, `PublicRoute`).
+- `/utils`: Helper functions and configuration (e.g., [api.js](file:///c:/Users/Shehan/Desktop/Ginuma_new_updates/ginum-frontend-main/src/utils/api.js) for Axios configuration).
+- `/hooks`: Custom React hooks (e.g., `usePageTitle`).
+
+### Backend Structure (`ginum-backend/src/main/java/com/example/GinumApps/`)
+- `/config`: Configurations like [SecurityConfig](file:///c:/Users/Shehan/Desktop/Ginuma_new_updates/ginum-backend-main/src/main/java/com/example/GinumApps/config/SecurityConfig.java#20-102) (CORS, Endpoint rules) and Swagger configuration.
+- `/controller`: REST API endpoints (e.g., `AuthController`, [CompanyRegistrationController](file:///c:/Users/Shehan/Desktop/Ginuma_new_updates/ginum-backend-main/src/main/java/com/example/GinumApps/controller/CompanyRegistrationController.java#24-66)).
+- `/dto`: Data Transfer Objects for receiving and sending JSON payloads without exposing DB entities.
+- `/filter`: Custom servlet filters, notably the [JwtFilter](file:///c:/Users/Shehan/Desktop/Ginuma_new_updates/ginum-backend-main/src/main/java/com/example/GinumApps/filter/JwtFilter.java#18-65) for parsing authorization headers.
+- `/model` (or entity): JPA Entities representing database tables ([Company](file:///c:/Users/Shehan/Desktop/Ginuma_new_updates/ginum-backend-main/src/main/java/com/example/GinumApps/model/Company.java#17-160), `User`, [SubscriptionPackage](file:///c:/Users/Shehan/Desktop/Ginuma_new_updates/ginum-backend-main/src/main/java/com/example/GinumApps/model/SubscriptionPackage.java#10-30)).
+- `/repository`: Spring Data JPA interfaces for database operations.
+- `/service`: Interfaces and implementations containing core business logic.
+- [GlobalExceptionHandler.java](file:///c:/Users/Shehan/Desktop/Ginuma_new_updates/ginum-backend-main/src/main/java/com/example/GinumApps/GlobalExceptionHandler.java): Centralized error handling (e.g., catching validation size errors, 404s).
+
+---
+
+## 6. Real-World API Integration Flow (Example)
+
+Currently, the UI has placeholders (hard-coded data). To make it functional, you will follow this pattern for every module:
+
+1. **Backend Entity & Repository:** Create the database table using JPA annotations.
+2. **Backend Service:** Write the business logic (e.g., calculate total revenue for Company X).
+3. **Backend Controller:** Create a `@GetMapping("/api/{companyId}/revenue")` endpoint.
+4. **Frontend API Call:** Use Axios in a React `useEffect` to fetch the data.
+   ```javascript
+   const fetchRevenue = async () => {
+       const companyId = sessionStorage.getItem("companyId");
+       const response = await api.get(`/api/${companyId}/revenue`);
+       setRevenueData(response.data);
+   }
+   ```
+5. **Frontend State to UI:** Map state variables to elements like Chart.js graphs or HTML tables.
+
+---
+
+## 7. Setup & Run Instructions
+
+### Database Setup
+1. Install MySQL and ensure it's running.
+2. Create an empty database.
+3. The backend will automatically create tables because of JPA configurations (`spring.jpa.hibernate.ddl-auto=update`).
+4. **Important Initialization:** Add initial seeds needed for the backend to run. Refer to [src/main/resources/data.sql](file:///c:/Users/Shehan/Desktop/Ginuma_new_updates/ginum-backend-main/src/main/resources/data.sql):
+   - Countries
+   - Currencies
+   - Default Subscription Packages (e.g., `Package ID: 1`)
+
+### Running the Backend
+1. Open the backend working directory.
+2. Configure your [src/main/resources/application.properties](file:///c:/Users/Shehan/Desktop/Ginuma_new_updates/ginum-backend-main/src/main/resources/application.properties) with your MySQL credentials.
+3. Run the application:
+   ```bash
+   mvnw spring-boot:run
+   ```
+4. Access the API documentation at: `http://localhost:8081/swagger-ui/index.html`
+
+### Running the Frontend
+1. Open the frontend working directory.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Set the [.env](file:///c:/Users/Shehan/Desktop/Ginuma_new_updates/ginum-frontend-main/.env) file target: `VITE_API_URL=http://localhost:8081`
+4. Run the development server:
+   ```bash
+   npm run dev
+   ```
+5. Browse the app at the URL provided by Vite (usually `http://localhost:5176`). Be mindful of the base URL setting `base: '/account/'` in [vite.config.js](file:///c:/Users/Shehan/Desktop/Ginuma_new_updates/ginum-frontend-main/vite.config.js).
