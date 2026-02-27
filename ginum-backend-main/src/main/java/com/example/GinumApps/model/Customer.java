@@ -51,7 +51,7 @@ public class Customer {
     private Double discountPercentage;
 
     @Lob
-    @Column(name = "business_registration")
+    @Column(name = "business_registration", columnDefinition = "LONGBLOB")
     private byte[] businessRegistration;
 
     @ManyToOne

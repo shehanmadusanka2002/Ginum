@@ -223,7 +223,7 @@ const Header = ({ toggleSidebar, isSidebarVisible }) => {
               }`}
           >
             <div className="py-1">
-              <Link to="/profile">
+              <Link to="/app/profile">
                 <button
                   navigate
                   className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 flex items-center"
@@ -231,7 +231,7 @@ const Header = ({ toggleSidebar, isSidebarVisible }) => {
                   <FaUser className="mr-2" /> Profile
                 </button>
               </Link>
-              <Link to={"/settings"}>
+              <Link to={"/app/settings"}>
                 <button className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 flex items-center">
                   <FaCog className="mr-2" /> Settings
                 </button>

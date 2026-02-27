@@ -1,77 +1,66 @@
-import React, { useState } from 'react';
-
-const receivableSummaryData = [
-  {
-    customer: 'ABC Corp',
-    notDueYet: '$1,500',
-    age1: '$200',
-    age2: '$300',
-    age3: '$500',
-    total: '$2,500',
-  },
-  {
-    customer: 'XYZ Ltd',
-    notDueYet: '$3,000',
-    age1: '$500',
-    age2: '$700',
-    age3: '$1,000',
-    total: '$5,200',
-  },
-  {
-    customer: 'Tech Solutions',
-    notDueYet: '$800',
-    age1: '$150',
-    age2: '$250',
-    age3: '$400',
-    total: '$1,600',
-  },
-];
-
-const receivableDetailData = [
-  {
-    customer: 'ABC Corp',
-    invoice: 'INV-12345',
-    invoiceDate: '2025-03-01',
-    dueDate: '2025-04-01',
-    notDueYet: '$1,500',
-    age1: '$200',
-    age2: '$300',
-    age3: '$500',
-    total: '$2,500',
-    balance: '$2,500',
-  },
-  {
-    customer: 'XYZ Ltd',
-    invoice: 'INV-67890',
-    invoiceDate: '2025-02-01',
-    dueDate: '2025-03-01',
-    notDueYet: '$3,000',
-    age1: '$500',
-    age2: '$700',
-    age3: '$1,000',
-    total: '$5,200',
-    balance: '$5,200',
-  },
-  {
-    customer: 'Tech Solutions',
-    invoice: 'INV-54321',
-    invoiceDate: '2025-03-10',
-    dueDate: '2025-04-10',
-    notDueYet: '$800',
-    age1: '$150',
-    age2: '$250',
-    age3: '$400',
-    total: '$1,600',
-    balance: '$1,600',
-  },
-];
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../../utils/api';
+import Alert from '../../components/Alert/Alert';
 
 export default function AgedReceivables() {
+  const [receivableDetailData, setReceivableDetailData] = useState([]);
+  const [receivableSummaryData, setReceivableSummaryData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
+
   const [activeTab, setActiveTab] = useState('summary');
   const [searchQuery, setSearchQuery] = useState('');
   const [dateRange, setDateRange] = useState('');
   const [page, setPage] = useState(1);
-  const itemsPerPage = 2;
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    const fetchAgedReceivables = async () => {
+      try {
+        const companyId = sessionStorage.getItem("companyId");
+        if (!companyId) return;
+
+        setLoading(true);
+        const response = await api.get(`/api/aged-receivables/companies/${companyId}`);
+        const details = Array.isArray(response.data) ? response.data : [];
+        setReceivableDetailData(details);
+
+        // Group into summary data by customer
+        const summaryMap = {};
+        details.forEach(item => {
+          if (!summaryMap[item.customer]) {
+            summaryMap[item.customer] = {
+              customer: item.customer,
+              notDueYet: 0,
+              age1: 0,
+              age2: 0,
+              age3: 0,
+              total: 0
+            };
+          }
+          summaryMap[item.customer].notDueYet += parseFloat(item.notDueYet) || 0;
+          summaryMap[item.customer].age1 += parseFloat(item.age1) || 0;
+          summaryMap[item.customer].age2 += parseFloat(item.age2) || 0;
+          summaryMap[item.customer].age3 += parseFloat(item.age3) || 0;
+          summaryMap[item.customer].total += parseFloat(item.total) || 0;
+        });
+
+        // Format numbers back to strings or keep as numbers (changing rendering below if needed)
+        // Here we format them as numbers
+        setReceivableSummaryData(Object.values(summaryMap));
+      } catch (err) {
+        console.error("Error fetching aged receivables:", err);
+        setError("Failed to load aged receivables data.");
+        Alert.error("Failed to load aged receivables data.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAgedReceivables();
+  }, []);
 
   // Filter data based on search query and date range
   const filterData = (data) => {
@@ -110,7 +99,29 @@ export default function AgedReceivables() {
   };
 
   const handleExport = () => {
-    console.log("Exporting data...");
+    const dataToExport = activeTab === 'summary' ? receivableSummaryData : receivableDetailData;
+    if (!dataToExport || dataToExport.length === 0) {
+      Alert.error("No data to export");
+      return;
+    }
+
+    let csvContent = "data:text/csv;charset=utf-8,";
+    // headers
+    const headers = Object.keys(dataToExport[0]).join(",");
+    csvContent += headers + "\r\n";
+    // rows
+    dataToExport.forEach(row => {
+      const values = Object.values(row).map(val => `"${val}"`).join(",");
+      csvContent += values + "\r\n";
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `aged_receivables_${activeTab}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleSearch = (e) => {
@@ -128,6 +139,15 @@ export default function AgedReceivables() {
   // Paginate the filtered data
   const paginatedData = filterData(activeTab === 'summary' ? receivableSummaryData : receivableDetailData)
     .slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center flex-col items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <p className="mt-4 text-gray-500">Loading aged receivables...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -161,8 +181,18 @@ export default function AgedReceivables() {
         </button>
 
         <div className="flex space-x-2 ml-auto">
-          <button className="px-4 py-2 bg-green-600 text-white rounded-md">Create Invoice</button>
-          <button className="px-4 py-2 bg-gray-600 text-white rounded-md">Add Payment</button>
+          <button
+            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition"
+            onClick={() => navigate('/account/app/sale/new')}
+          >
+            Create Invoice
+          </button>
+          <button
+            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition"
+            onClick={() => Alert.info("Payment feature coming soon!")}
+          >
+            Add Payment
+          </button>
         </div>
       </div>
 
@@ -200,11 +230,11 @@ export default function AgedReceivables() {
               {paginatedData.map((row, index) => (
                 <tr key={index} className="hover:bg-gray-50">
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.customer}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.notDueYet}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.age1}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.age2}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.age3}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.total}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${parseFloat(row.notDueYet).toFixed(2)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${parseFloat(row.age1).toFixed(2)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${parseFloat(row.age2).toFixed(2)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${parseFloat(row.age3).toFixed(2)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-semibold">${parseFloat(row.total).toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -234,12 +264,12 @@ export default function AgedReceivables() {
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.invoice}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.invoiceDate}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.dueDate}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.notDueYet}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.age1}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.age2}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.age3}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.total}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{row.balance}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${parseFloat(row.notDueYet).toFixed(2)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${parseFloat(row.age1).toFixed(2)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${parseFloat(row.age2).toFixed(2)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${parseFloat(row.age3).toFixed(2)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-semibold">${parseFloat(row.total).toFixed(2)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 font-bold">${parseFloat(row.balance).toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>

@@ -29,6 +29,27 @@ public class SalesOrderService {
     private final JournalEntryService journalService;
     private final AgingReceivableSnapshotRepository agingReceivableSnapshotRepo;
 
+    public String getNextSoNumber(Integer companyId) {
+        String lastSo = salesOrderRepo.findLastSoNumberByCompanyId(companyId.longValue());
+        if (lastSo == null || lastSo.isEmpty()) {
+            return "SO-00000001";
+        }
+        try {
+            String numPart = lastSo.startsWith("SO-") ? lastSo.substring(3) : lastSo;
+            long nextNum = Long.parseLong(numPart) + 1;
+            return String.format("SO-%08d", nextNum);
+        } catch (NumberFormatException e) {
+            return "SO-00000001";
+        }
+    }
+
+    public List<SalesOrderResponseDto> getAllSalesOrdersByCompany(Integer companyId) {
+        return salesOrderRepo.findAll().stream() // Ideally should be findByCompany_CompanyId
+                .filter(so -> so.getCompany().getCompanyId().equals(companyId))
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+    }
+
     @Transactional
     public SalesOrderResponseDto createSalesOrder(SalesOrderRequestDto request, Integer companyId) {
         Company company = companyRepo.findById(companyId)
@@ -43,8 +64,8 @@ public class SalesOrderService {
         Account paymentAccount = null;
         if (request.getPaymentAccountCode() != null) {
             paymentAccount = accountRepo.findByAccountCodeAndCompany_CompanyId(
-                    request.getPaymentAccountCode(), companyId
-            ).orElseThrow(() -> new ResourceNotFoundException("Invalid payment account code"));
+                    request.getPaymentAccountCode(), companyId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Invalid payment account code"));
         }
 
         SalesOrder order = new SalesOrder();
@@ -71,13 +92,15 @@ public class SalesOrderService {
             Item item = itemRepo.findById(itemRequest.getItemId())
                     .orElseThrow(() -> new ResourceNotFoundException("Item not found: " + itemRequest.getItemId()));
             Account account = accountRepo.findByAccountCodeAndCompany_CompanyId(
-                            itemRequest.getAccountCode(), company.getCompanyId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Account not found: " + itemRequest.getAccountCode()));
+                    itemRequest.getAccountCode(), company.getCompanyId())
+                    .orElseThrow(
+                            () -> new ResourceNotFoundException("Account not found: " + itemRequest.getAccountCode()));
 
             Project project = null;
             if (itemRequest.getProjectId() != null) {
                 project = projectRepo.findById(itemRequest.getProjectId())
-                        .orElseThrow(() -> new ResourceNotFoundException("Project not found: " + itemRequest.getProjectId()));
+                        .orElseThrow(() -> new ResourceNotFoundException(
+                                "Project not found: " + itemRequest.getProjectId()));
             }
 
             SalesOrderLineItem line = new SalesOrderLineItem();
@@ -103,11 +126,14 @@ public class SalesOrderService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         order.setSubtotal(subtotal);
-//        order.setFreight(order.getFreight() != null ? order.getFreight() : BigDecimal.ZERO);
-//        order.setTaxAmount(order.getTaxAmount() != null ? order.getTaxAmount() : BigDecimal.ZERO);
-//        order.setTotal(order.getSubtotal().add(order.getFreight()).add(order.getTaxAmount()));
+        // order.setFreight(order.getFreight() != null ? order.getFreight() :
+        // BigDecimal.ZERO);
+        // order.setTaxAmount(order.getTaxAmount() != null ? order.getTaxAmount() :
+        // BigDecimal.ZERO);
+        // order.setTotal(order.getSubtotal().add(order.getFreight()).add(order.getTaxAmount()));
         order.setTotal(subtotal);
-        order.setBalanceDue(order.getTotal().subtract(order.getAmountPaid() != null ? order.getAmountPaid() : BigDecimal.ZERO));
+        order.setBalanceDue(
+                order.getTotal().subtract(order.getAmountPaid() != null ? order.getAmountPaid() : BigDecimal.ZERO));
     }
 
     private void createJournalEntries(SalesOrder order) {
@@ -131,8 +157,7 @@ public class SalesOrderService {
                     item.getAccount().getAccountCode(),
                     lineTotal,
                     true,
-                    item.getDescription()
-            ));
+                    item.getDescription()));
         }
 
         // Credit amountPaid if payment made
@@ -141,8 +166,7 @@ public class SalesOrderService {
                     order.getPaymentAccount().getAccountCode(),
                     order.getAmountPaid(),
                     false,
-                    "Received Payment"
-            ));
+                    "Received Payment"));
         }
 
         // Credit receivable for remaining
@@ -151,8 +175,7 @@ public class SalesOrderService {
                     order.getCompany().getAccountsReceivableAccount().getAccountCode(),
                     order.getBalanceDue(),
                     false,
-                    "Receivable from " + order.getCustomer().getName()
-            ));
+                    "Receivable from " + order.getCustomer().getName()));
         }
 
         journal.setLines(lines);
@@ -191,8 +214,8 @@ public class SalesOrderService {
         }
 
         Account paymentAccount = accountRepo.findByAccountCodeAndCompany_CompanyId(
-                request.getPaymentAccountCode(), request.getCompanyId()
-        ).orElseThrow(() -> new ResourceNotFoundException("Payment account not found"));
+                request.getPaymentAccountCode(), request.getCompanyId())
+                .orElseThrow(() -> new ResourceNotFoundException("Payment account not found"));
 
         // Update balances
         order.setAmountPaid(order.getAmountPaid().add(request.getAmount()));
@@ -215,16 +238,14 @@ public class SalesOrderService {
                 paymentAccount.getAccountCode(),
                 request.getAmount(),
                 true,
-                "Customer payment received"
-        ));
+                "Customer payment received"));
 
         // Credit accounts receivable
         lines.add(new JournalEntryLineDto(
                 order.getCompany().getAccountsReceivableAccount().getAccountCode(),
                 request.getAmount(),
                 false,
-                "Reduce receivable from customer"
-        ));
+                "Reduce receivable from customer"));
 
         journal.setLines(lines);
         journalService.createJournalEntry(journal);
@@ -232,8 +253,6 @@ public class SalesOrderService {
         // OPTIONAL: Update aging snapshot
         // You can remove or update the corresponding aging snapshot here if needed.
     }
-
-
 
     private SalesOrderResponseDto convertToDto(SalesOrder order) {
         SalesOrderResponseDto dto = new SalesOrderResponseDto();
@@ -244,8 +263,8 @@ public class SalesOrderService {
         dto.setIssueDate(order.getIssueDate());
         dto.setNotes(order.getNotes());
         dto.setSubtotal(order.getSubtotal());
-//        dto.setTaxAmount(order.getTaxAmount());
-//        dto.setFreight(order.getFreight());
+        // dto.setTaxAmount(order.getTaxAmount());
+        // dto.setFreight(order.getFreight());
         dto.setTotal(order.getTotal());
         dto.setAmountPaid(order.getAmountPaid());
         dto.setBalanceDue(order.getBalanceDue());

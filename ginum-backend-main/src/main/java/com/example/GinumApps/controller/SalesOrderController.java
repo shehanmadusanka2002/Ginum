@@ -19,9 +19,22 @@ public class SalesOrderController {
     @PostMapping("/company/{companyId}")
     public ResponseEntity<SalesOrderResponseDto> createSalesOrder(
             @PathVariable Integer companyId,
-            @Valid @RequestBody SalesOrderRequestDto requestDto
-    ) {
+            @Valid @RequestBody SalesOrderRequestDto requestDto) {
         SalesOrderResponseDto response = salesOrderService.createSalesOrder(requestDto, companyId);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    @GetMapping("/company/{companyId}/next-so-number")
+    public ResponseEntity<java.util.Map<String, String>> getNextSoNumber(@PathVariable Integer companyId) {
+        String nextSoNumber = salesOrderService.getNextSoNumber(companyId);
+        java.util.Map<String, String> response = new java.util.HashMap<>();
+        response.put("soNumber", nextSoNumber);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/company/{companyId}")
+    public ResponseEntity<java.util.List<SalesOrderResponseDto>> getAllSalesOrdersByCompany(
+            @PathVariable Integer companyId) {
+        return ResponseEntity.ok(salesOrderService.getAllSalesOrdersByCompany(companyId));
     }
 }

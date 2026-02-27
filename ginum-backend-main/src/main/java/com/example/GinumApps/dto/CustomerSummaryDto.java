@@ -9,10 +9,11 @@ import lombok.Data;
 @Data
 @Builder
 public class CustomerSummaryDto {
-    private String customerName;
+    private Long id;
+    private String name;
     private String email;
-    private String mobileNo;
-    private String address;
+    private String phoneNo;
+    private String billingAddress;
     private CustomerType customerType;
     private TaxType tax;
 }

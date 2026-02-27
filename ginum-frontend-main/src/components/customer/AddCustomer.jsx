@@ -1,6 +1,11 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { apiUrl } from "../../utils/api";
+import Alert from "../../components/Alert/Alert";
 
 export default function AddCustomerForm() {
+  const navigate = useNavigate();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     phone_no: "",
@@ -54,18 +59,13 @@ export default function AddCustomerForm() {
     }
 
     // NIC No validation
-    if (formData.nic_no && !/^[0-9]{9}[vVxX]?$/.test(formData.nic_no)) {
+    if (formData.nic_no && !/^([0-9]{9}[vVxX]|[0-9]{12})$/.test(formData.nic_no)) {
       newErrors.nic_no = "Invalid NIC No";
     }
 
     // Customer Type validation
     if (!formData.customer_type) {
       newErrors.customer_type = "Customer Type is required";
-    }
-
-    // Address validation
-    if (!formData.address.trim()) {
-      newErrors.address = "Address is required";
     }
 
     // TIN No validation
@@ -102,12 +102,69 @@ export default function AddCustomerForm() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const isValid = validateForm();
     if (isValid) {
-      console.log("Form Data Submitted:", formData);
-      // Handle form submission logic (e.g., send to backend)
+      setIsSubmitting(true);
+      try {
+        const companyId = sessionStorage.getItem("companyId");
+        const token = sessionStorage.getItem("auth_token");
+
+        if (!companyId || !token) {
+          Alert.error("Please login first");
+          setIsSubmitting(false);
+          return;
+        }
+
+        const customerDto = {
+          name: formData.name,
+          phoneNo: formData.phone_no,
+          email: formData.email,
+          nicNo: formData.nic_no,
+          customerType: formData.customer_type.toUpperCase(), // Assuming Enum is uppercase e.g. INDIVIDUAL, CORPORATE
+          vat: formData.vat,
+          tinNo: formData.tin_no,
+          deliveryAddress: formData.delivery_address,
+          tax: formData.tax.toUpperCase(), // Ensure tax matches Enum e.g. INCLUSIVE
+          billingAddress: formData.billing_address,
+          swiftNo: formData.swift_no || "",
+          currencyId: formData.currency === "USD" ? 1 : formData.currency === "EUR" ? 2 : 3,
+          discountPercentage: formData.discount ? parseFloat(formData.discount) : 0.0,
+          companyId: parseInt(companyId),
+        };
+
+        const formDataToSend = new FormData();
+        formDataToSend.append(
+          "customer",
+          new Blob([JSON.stringify(customerDto)], { type: "application/json" })
+        );
+
+        if (formData.br_document) {
+          formDataToSend.append("businessRegistration", formData.br_document);
+        }
+
+        const response = await fetch(`${apiUrl}/api/customers`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formDataToSend,
+        });
+
+        if (response.ok) {
+          Alert.success("Customer added successfully!");
+          navigate("/account/app/customers"); // Adjust navigation route based on your layout
+        } else {
+          const errorMessage = await response.text();
+          Alert.error("Failed to add customer: " + errorMessage);
+        }
+      } catch (error) {
+        console.error("Error adding customer:", error);
+        Alert.error("An error occurred while adding the customer.");
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -261,7 +318,7 @@ export default function AddCustomerForm() {
                   />
                   Exclusive
                 </label>
-                
+
               </div>
             </div>
 
@@ -370,9 +427,11 @@ export default function AddCustomerForm() {
 
           <button
             type="submit"
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            disabled={isSubmitting}
+            className={`px-4 py-2 rounded-lg text-white ${isSubmitting ? "bg-blue-400 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-700"
+              }`}
           >
-            Save
+            {isSubmitting ? "Saving..." : "Save"}
           </button>
         </form>
       </div>

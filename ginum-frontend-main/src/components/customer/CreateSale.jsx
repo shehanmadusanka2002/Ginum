@@ -4,6 +4,8 @@ import { FaTimes } from "react-icons/fa";
 import AddAccountForm from "../account/AddAccountForm";
 import NewProjectForm from "../projects/NewProjectForm";
 import api from "../../utils/api";
+import Alert from "../../components/Alert/Alert";
+import { useNavigate } from "react-router-dom";
 
 const CreateSaleOrder = () => {
   const [isServiceMode, setIsServiceMode] = useState(false);
@@ -19,6 +21,12 @@ const CreateSaleOrder = () => {
     },
   ]);
   const [selectedCustomer, setSelectedCustomer] = useState("");
+  const [customers, setCustomers] = useState([]);
+  const [items, setItems] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [soNumber, setSoNumber] = useState("");
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(true);
+  const [isLoadingItemsProjects, setIsLoadingItemsProjects] = useState(true);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [modalTransition, setModalTransition] = useState("opacity-0 invisible");
@@ -32,6 +40,11 @@ const CreateSaleOrder = () => {
   const [amountPaid, setAmountPaid] = useState(0);
   const [balanceDue, setBalanceDue] = useState(0);
   const [dueDate, setDueDate] = useState("");
+  const [issueDate, setIssueDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [notes, setNotes] = useState("");
+  const [paymentAccountCode, setPaymentAccountCode] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const navigate = useNavigate();
 
   // Calculate totals when relevant values change
   useEffect(() => {
@@ -112,23 +125,80 @@ const CreateSaleOrder = () => {
     fetchAccounts();
   }, []);
 
-  const customers = [
-    { id: "1", name: "Customer A" },
-    { id: "2", name: "Customer B" },
-    { id: "3", name: "Customer C" },
-  ];
+  // Fetch customers, items, projects, soNumber
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        const companyId = sessionStorage.getItem("companyId");
+        const token = sessionStorage.getItem("auth_token");
+        if (!companyId || !token) return;
 
-  const projects = [
-    { id: "1", name: "Project A" },
-    { id: "2", name: "Project B" },
-    { id: "3", name: "Project C" },
-  ];
+        setIsLoadingCustomers(true);
+        const response = await fetch(`${api.defaults.baseURL}/api/customers/companies/${companyId}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCustomers(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        console.error("Error fetching customers:", error);
+      } finally {
+        setIsLoadingCustomers(false);
+      }
+    };
 
-  const items = [
-    { id: "1", name: "Item A" },
-    { id: "2", name: "Item B" },
-    { id: "3", name: "Item C" },
-  ];
+    const fetchItemsAndProjects = async () => {
+      try {
+        const companyId = sessionStorage.getItem("companyId");
+        if (!companyId) return;
+
+        setIsLoadingItemsProjects(true);
+        const [itemsRes, projectsRes] = await Promise.all([
+          api.get(`/api/companies/${companyId}/items`),
+          api.get(`/api/companies/${companyId}/projects`)
+        ]);
+
+        let itemsData = itemsRes.data;
+        if (Array.isArray(itemsRes)) itemsData = itemsRes;
+        else if (Array.isArray(itemsRes.data)) itemsData = itemsRes.data;
+        else if (itemsRes?.data?.data && Array.isArray(itemsRes.data.data)) itemsData = itemsRes.data.data;
+
+        setItems(Array.isArray(itemsData) ? itemsData : []);
+
+        let projectsData = projectsRes.data;
+        if (Array.isArray(projectsRes)) projectsData = projectsRes;
+        else if (Array.isArray(projectsRes.data)) projectsData = projectsRes.data;
+        else if (projectsRes?.data?.data && Array.isArray(projectsRes.data.data)) projectsData = projectsRes.data.data;
+
+        setProjects(Array.isArray(projectsData) ? projectsData : []);
+      } catch (error) {
+        console.error("Error fetching items and projects:", error);
+      } finally {
+        setIsLoadingItemsProjects(false);
+      }
+    };
+
+    const fetchSoNumber = async () => {
+      try {
+        const companyId = sessionStorage.getItem("companyId");
+        if (!companyId) return;
+
+        const response = await api.get(`/api/sales-orders/company/${companyId}/next-so-number`);
+        if (response && response.data && response.data.soNumber) {
+          setSoNumber(response.data.soNumber);
+        } else if (response && response.soNumber) {
+          setSoNumber(response.soNumber);
+        }
+      } catch (error) {
+        console.error("Error fetching next SO number:", error);
+      }
+    };
+
+    fetchCustomers();
+    fetchItemsAndProjects();
+    fetchSoNumber();
+  }, []);
 
   const handleRowChange = (index, field, value) => {
     const updatedRows = [...rows];
@@ -166,6 +236,70 @@ const CreateSaleOrder = () => {
     setRows(updatedRows);
   };
 
+  const handleSubmit = async () => {
+    // Validate required fields
+    if (!selectedCustomer) {
+      Alert.error("Please select a customer.");
+      return;
+    }
+
+    const companyId = sessionStorage.getItem("companyId");
+    if (!companyId) {
+      Alert.error("Company ID not found. Please log in again.");
+      return;
+    }
+
+    // Filter out completely empty rows
+    const validRows = rows.filter(
+      (row) =>
+        (isServiceMode || row.itemId) &&
+        row.description &&
+        row.account &&
+        (!isServiceMode ? row.quantity && row.unitPrice : row.amount)
+    );
+
+    if (validRows.length === 0) {
+      Alert.error("Please add at least one valid item/service row.");
+      return;
+    }
+
+    const payload = {
+      companyId: parseInt(companyId),
+      customerId: parseInt(selectedCustomer),
+      soNumber: soNumber,
+      issueDate: issueDate,
+      dueDate: dueDate || null,
+      notes: notes,
+      salesType: isServiceMode ? "SERVICE" : "ITEMS",
+      amountPaid: parseFloat(amountPaid) || 0,
+      paymentAccountCode: paymentAccountCode || null,
+      items: validRows.map((row) => ({
+        itemId: isServiceMode ? null : parseInt(row.itemId),
+        description: row.description,
+        accountCode: accounts.find(a => a.id.toString() === row.account.toString())?.accountCode || "",
+        quantity: isServiceMode ? 1 : parseInt(row.quantity),
+        unitPrice: isServiceMode ? parseFloat(row.amount) : parseFloat(row.unitPrice),
+        discountPercent: isServiceMode ? 0 : parseFloat(row.discount) || 0,
+        projectId: row.project ? parseInt(row.project) : null,
+        itemType: isServiceMode ? "SERVICE" : "GOODS"
+      }))
+    };
+
+    setIsSubmitting(true);
+    try {
+      const response = await api.post(`/api/sales-orders/company/${companyId}`, payload);
+      if (response.status === 201 || response.status === 200) {
+        Alert.success("Sales order created successfully!");
+        navigate("/account/app/sales"); // Replace with correct route
+      }
+    } catch (error) {
+      console.error("Error creating sales order:", error);
+      Alert.error("Failed to create sales order.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto bg-white shadow-lg rounded-lg p-4 sm:p-6 my-4 sm:mt-6">
       <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">
@@ -182,13 +316,20 @@ const CreateSaleOrder = () => {
             value={selectedCustomer}
             onChange={(e) => setSelectedCustomer(e.target.value)}
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+            disabled={isLoadingCustomers}
           >
             <option value="">Select a customer</option>
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.name}
-              </option>
-            ))}
+            {isLoadingCustomers ? (
+              <option value="">Loading customers...</option>
+            ) : customers.length === 0 ? (
+              <option value="">No customers available</option>
+            ) : (
+              customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))
+            )}
           </select>
         </div>
         <div>
@@ -197,8 +338,10 @@ const CreateSaleOrder = () => {
           </label>
           <input
             type="text"
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-            placeholder="00000001"
+            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base bg-gray-100"
+            placeholder="SO-00000001"
+            value={soNumber}
+            readOnly
           />
         </div>
       </div>
@@ -212,7 +355,8 @@ const CreateSaleOrder = () => {
           <input
             type="date"
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-            defaultValue="2025-02-27"
+            value={issueDate}
+            onChange={(e) => setIssueDate(e.target.value)}
           />
         </div>
       </div>
@@ -305,13 +449,18 @@ const CreateSaleOrder = () => {
                         handleRowChange(index, "itemId", e.target.value)
                       }
                       className=" px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                      disabled={isLoadingItemsProjects}
                     >
                       <option value="">Select Item</option>
-                      {items.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
+                      {isLoadingItemsProjects ? (
+                        <option value="">Loading items...</option>
+                      ) : (
+                        items.map((item) => (
+                          <option key={item.id || item.itemId} value={item.id || item.itemId}>
+                            {item.name}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </td>
                 )}
@@ -416,13 +565,18 @@ const CreateSaleOrder = () => {
                       handleRowChange(index, "project", e.target.value)
                     }
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                    disabled={isLoadingItemsProjects}
                   >
                     <option value="">Select project</option>
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
+                    {isLoadingItemsProjects ? (
+                      <option value="">Loading projects...</option>
+                    ) : (
+                      projects.map((project) => (
+                        <option key={project.id} value={project.id}>
+                          {project.name}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </td>
                 <td className="p-2">
@@ -448,6 +602,8 @@ const CreateSaleOrder = () => {
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
           rows={3}
           placeholder="Notes"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
         ></textarea>
       </div>
 
@@ -489,6 +645,22 @@ const CreateSaleOrder = () => {
             step="0.01"
           />
         </div>
+        <div className="w-full md:w-1/2 flex justify-between items-center mb-2">
+          <label className="text-gray-700 font-medium">Payment Account:</label>
+          <select
+            className="w-1/2 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+            value={paymentAccountCode}
+            onChange={(e) => setPaymentAccountCode(e.target.value)}
+            disabled={isLoadingAccounts || parseFloat(amountPaid) <= 0}
+          >
+            <option value="">Select Account</option>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.accountCode}>
+                {account.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="w-full md:w-1/2 flex justify-between items-center">
           <span className="text-gray-700 font-medium">Balance Due:</span>
           <span className="text-gray-900">${balanceDue.toFixed(2)}</span>
@@ -515,8 +687,13 @@ const CreateSaleOrder = () => {
         {/* <button className="bg-gray-500 text-white px-3 py-2 rounded-lg hover:bg-gray-600 text-sm sm:text-base">
           Cancel
         </button> */}
-        <button className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 text-sm sm:text-base">
-          Save
+        <button
+          className={`px-3 py-2 rounded-lg text-sm sm:text-base text-white ${isSubmitting ? "bg-blue-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+            }`}
+          onClick={handleSubmit}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? "Saving..." : "Save"}
         </button>
       </div>
 

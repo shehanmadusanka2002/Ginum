@@ -55,6 +55,8 @@ public class SecurityConfig {
                                 "/api/companies/{companyId}/accounts",
                                 "/api/companies/{companyId}/accounts/bank",
                                 "/api/suppliers",
+                                "/api/customers",
+                                "/api/customers/**",
                                 "/api/companies/{companyId}/journal-entries")
                         .hasAnyRole("COMPANY", "SUPER_ADMIN")
                         .requestMatchers("/api/employees/**", "/api/suppliers/**",
