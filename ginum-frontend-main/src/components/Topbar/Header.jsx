@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { FaBell, FaBars, FaUser, FaCog, FaSignOutAlt } from "react-icons/fa";
+import { FaBell, FaBars, FaUser, FaCog, FaSignOutAlt, FaTrash } from "react-icons/fa";
 import PropTypes from "prop-types";
 import api from "../../utils/api";
 
@@ -139,6 +139,18 @@ const Header = ({ toggleSidebar, isSidebarVisible }) => {
     // You can add your logic here, like navigating to a notifications page
   };
 
+  // Function to clear all notifications
+  const clearAllNotifications = async () => {
+    const companyId = sessionStorage.getItem("companyId");
+    try {
+      await api.delete(`/api/companies/${companyId}/notifications`);
+      setNotifications([]);
+      setIsNotificationDropdownOpen(false);
+    } catch (err) {
+      console.error("Failed to clear notifications", err);
+    }
+  };
+
   // Count of unread notifications
   const unreadNotificationsCount = notifications.filter((n) => !n.readStatus).length;
 
@@ -183,20 +195,39 @@ const Header = ({ toggleSidebar, isSidebarVisible }) => {
                 : "opacity-0 translate-y-2 pointer-events-none"
               }`}
           >
-            <div className="py-2">
-              {notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`px-4 py-2 ${notification.readStatus ? "bg-gray-50" : "bg-blue-50"
-                    } hover:bg-gray-100 cursor-pointer`}
-                  onClick={() => markNotificationAsRead(notification.id)}
+            {/* Header with Clear Button */}
+            <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+              <span className="text-sm font-semibold text-gray-700">Notifications</span>
+              {notifications.length > 0 && (
+                <button
+                  onClick={clearAllNotifications}
+                  className="text-red-500 hover:text-red-700 transition-colors"
+                  title="Clear all notifications"
                 >
-                  <p className="text-sm text-gray-700">{notification.message}</p>
-                  {!notification.readStatus && (
-                    <span className="text-xs text-blue-500">New</span>
-                  )}
+                  <FaTrash className="text-sm" />
+                </button>
+              )}
+            </div>
+            <div className="py-2">
+              {notifications.length === 0 ? (
+                <div className="px-4 py-3 text-center text-sm text-gray-500">
+                  No notifications
                 </div>
-              ))}
+              ) : (
+                notifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    className={`px-4 py-2 ${notification.readStatus ? "bg-gray-50" : "bg-blue-50"
+                      } hover:bg-gray-100 cursor-pointer`}
+                    onClick={() => markNotificationAsRead(notification.id)}
+                  >
+                    <p className="text-sm text-gray-700">{notification.message}</p>
+                    {!notification.readStatus && (
+                      <span className="text-xs text-blue-500">New</span>
+                    )}
+                  </div>
+                ))
+              )}
               {/* Show All Notifications Button */}
               <button
                 onClick={handleShowAllNotifications}

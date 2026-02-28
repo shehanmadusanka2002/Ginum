@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { MdDelete, MdEdit, MdVisibility, MdRefresh } from "react-icons/md";
-import { FaCheck, FaTimes, FaClock, FaPaperPlane, FaFileDownload } from "react-icons/fa";
+import { FaCheck, FaTimes, FaClock, FaPaperPlane, FaFileDownload, FaEnvelope } from "react-icons/fa";
 import api from "../../utils/api";
 import Alert from "../Alert/Alert";
 
@@ -117,6 +117,16 @@ const AllQuotations = () => {
     } catch (error) {
       console.error("Error downloading PDF:", error);
       Alert.error("Failed to download PDF");
+    }
+  };
+
+  const sendEmail = async (quotationId, customerName) => {
+    try {
+      const response = await api.post(`/api/companies/${companyId}/quotations/${quotationId}/send-email`);
+      Alert.success(`Email sent successfully to ${customerName}`);
+    } catch (error) {
+      console.error("Error sending email:", error);
+      Alert.error(error.response?.data || "Failed to send email");
     }
   };
 
@@ -246,6 +256,14 @@ const AllQuotations = () => {
                           title="Download PDF"
                         >
                           <FaFileDownload className="h-5 w-5" />
+                        </button>
+
+                        <button
+                          onClick={() => sendEmail(quotation.id, quotation.customerName)}
+                          className="text-orange-600 hover:text-orange-800"
+                          title="Send Email to Customer"
+                        >
+                          <FaEnvelope className="h-5 w-5" />
                         </button>
 
                         {quotation.status === "DRAFT" && (

@@ -4,8 +4,11 @@ import com.example.GinumApps.dto.QuotationRequestDto;
 import com.example.GinumApps.dto.QuotationResponseDto;
 import com.example.GinumApps.enums.QuotationStatus;
 import com.example.GinumApps.model.Quotation;
+import com.example.GinumApps.service.AppNotificationService;
+import com.example.GinumApps.service.EmailService;
 import com.example.GinumApps.service.PdfGenerationService;
 import com.example.GinumApps.service.QuotationService;
+import jakarta.mail.MessagingException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -23,6 +26,8 @@ public class QuotationController {
     
     private final QuotationService quotationService;
     private final PdfGenerationService pdfGenerationService;
+    private final EmailService emailService;
+    private final AppNotificationService notificationService;
 
     @PostMapping
     public ResponseEntity<QuotationResponseDto> createQuotation(
@@ -99,5 +104,36 @@ public class QuotationController {
         headers.setContentLength(pdfBytes.length);
         
         return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
+    }
+
+    @PostMapping("/{quotationId}/send-email")
+    public ResponseEntity<String> sendQuotationEmail(
+            @PathVariable Integer companyId,
+            @PathVariable Long quotationId) {
+        try {
+            // Get the quotation with all details
+            Quotation quotation = quotationService.getQuotationEntityById(companyId, quotationId);
+            
+            // Generate PDF
+            byte[] pdfBytes = pdfGenerationService.generateQuotationPdf(quotation);
+            
+            // Send email to customer
+            String customerEmail = quotation.getCustomer().getEmail();
+            String customerName = quotation.getCustomer().getName();
+            String quotationNumber = quotation.getQuotationNumber();
+            
+            emailService.sendQuotationEmail(customerEmail, customerName, quotationNumber, pdfBytes);
+            
+            // Create notification
+            notificationService.createNotification(companyId, 
+                java.util.Map.of("message", 
+                    String.format("📧 Quotation %s has been emailed to %s (%s)", 
+                        quotationNumber, customerName, customerEmail)));
+            
+            return ResponseEntity.ok("Email sent successfully to " + customerEmail);
+        } catch (MessagingException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to send email: " + e.getMessage());
+        }
     }
 }

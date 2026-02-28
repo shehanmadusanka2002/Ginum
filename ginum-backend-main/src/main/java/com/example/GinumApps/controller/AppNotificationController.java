@@ -38,4 +38,14 @@ public class AppNotificationController {
         AppNotification notif = notificationService.createNotification(companyId, payload);
         return ResponseEntity.ok(notif);
     }
+
+    @DeleteMapping
+    public ResponseEntity<?> clearAllNotifications(@PathVariable Integer companyId) {
+        boolean success = notificationService.clearAllNotifications(companyId);
+        if (success) {
+            return ResponseEntity.ok().build();
+        } else {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
 }

@@ -16,6 +16,8 @@ public interface QuotationRepository extends JpaRepository<Quotation, Long> {
     
     Optional<Quotation> findByIdAndCompany_CompanyId(Long id, Integer companyId);
     
+    Optional<Quotation> findByQuotationNumber(String quotationNumber);
+    
     @Query("SELECT MAX(q.quotationNumber) FROM Quotation q WHERE q.company.companyId = :companyId")
     String findLastQuotationNumberByCompanyId(@Param("companyId") Integer companyId);
 }

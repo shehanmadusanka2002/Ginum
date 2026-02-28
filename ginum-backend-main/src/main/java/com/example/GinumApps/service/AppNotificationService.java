@@ -68,4 +68,14 @@ public class AppNotificationService {
                 .build();
         return notificationRepository.save(notif);
     }
+
+    public boolean clearAllNotifications(Integer companyId) {
+        try {
+            List<AppNotification> notifications = notificationRepository.findByCompanyIdOrderByCreatedAtDesc(companyId);
+            notificationRepository.deleteAll(notifications);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }

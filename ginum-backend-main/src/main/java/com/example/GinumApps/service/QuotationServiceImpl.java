@@ -4,6 +4,7 @@ import com.example.GinumApps.dto.QuotationLineItemDto;
 import com.example.GinumApps.dto.QuotationRequestDto;
 import com.example.GinumApps.dto.QuotationResponseDto;
 import com.example.GinumApps.enums.QuotationStatus;
+import com.example.GinumApps.model.AppNotification;
 import com.example.GinumApps.model.Company;
 import com.example.GinumApps.model.Customer;
 import com.example.GinumApps.model.Quotation;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -26,6 +28,7 @@ public class QuotationServiceImpl implements QuotationService {
     private final QuotationRepository quotationRepository;
     private final CompanyRepository companyRepository;
     private final CustomerRepository customerRepository;
+    private final AppNotificationService notificationService;
 
     @Override
     @Transactional
@@ -151,8 +154,28 @@ public class QuotationServiceImpl implements QuotationService {
         Quotation quotation = quotationRepository.findByIdAndCompany_CompanyId(quotationId, companyId)
                 .orElseThrow(() -> new RuntimeException("Quotation not found"));
         
+        QuotationStatus oldStatus = quotation.getStatus();
         quotation.setStatus(status);
         Quotation updatedQuotation = quotationRepository.save(quotation);
+        
+        // Create notification for status changes
+        if (status == QuotationStatus.ACCEPTED) {
+            createNotification(companyId, 
+                String.format("✅ Quotation %s has been accepted by customer %s!", 
+                    quotation.getQuotationNumber(), 
+                    quotation.getCustomer().getName()));
+        } else if (status == QuotationStatus.REJECTED) {
+            createNotification(companyId, 
+                String.format("❌ Quotation %s has been rejected by customer %s.", 
+                    quotation.getQuotationNumber(), 
+                    quotation.getCustomer().getName()));
+        } else if (status == QuotationStatus.SENT && oldStatus == QuotationStatus.DRAFT) {
+            createNotification(companyId, 
+                String.format("📧 Quotation %s has been sent to customer %s.", 
+                    quotation.getQuotationNumber(), 
+                    quotation.getCustomer().getName()));
+        }
+        
         return toResponseDto(updatedQuotation);
     }
 
@@ -209,5 +232,16 @@ public class QuotationServiceImpl implements QuotationService {
 
         dto.setLineItems(lineItemDtos);
         return dto;
+    }
+    
+    private void createNotification(Integer companyId, String message) {
+        AppNotification notification = AppNotification.builder()
+                .companyId(companyId)
+                .message(message)
+                .readStatus(false)
+                .createdAt(LocalDateTime.now())
+                .build();
+        notificationService.createNotification(companyId, 
+            java.util.Map.of("message", message));
     }
 }
