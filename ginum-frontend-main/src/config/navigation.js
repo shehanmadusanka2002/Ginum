@@ -257,21 +257,20 @@ export const navItems = [
       },
     ],
   },
-  // {
-  //   id: "quotations",
-  //   path: "/quotations",
-  //   label: "Quotations",
-  //   icon: FaQuoteRight,
-  //   subItems: [
-  //     {
-  //       id: "new-quotation",
-  //       path: "/quotations/new",
-  //       label: "Create Quotation",
-  //     },
-  //     { id: "all-quotation", path: "/quotations/all", label: "All Quotations" },
-  //     ,
-  //   ],
-  // },
+  {
+    id: "quotations",
+    path: "/app/quotations",
+    label: "Quotations",
+    icon: FaQuoteRight,
+    subItems: [
+      {
+        id: "new-quotation",
+        path: "/app/quotations/new",
+        label: "Create Quotation",
+      },
+      { id: "all-quotation", path: "/app/quotations/all", label: "All Quotations" },
+    ],
+  },
 
   {
     sectionTitle: "USER MANAGEMENT",
